@@ -19,7 +19,7 @@ func init() {
 		HttpHeaders: docker.defaultDockerHeaders,
 		Host:        docker.defaultDockerHost,
 		Version:     docker.defaultDockerVersion,
-		HttpClient:  docker.defaultDockerHttpClient,
+		HttpClient:  nil,
 	}
 
 	d, err := docker.NewDocker(cfg)

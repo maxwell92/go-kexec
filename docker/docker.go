@@ -12,14 +12,13 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
+var (
 	ibContext     = "/tmp/faas-imagebuild-context/"
 	executionFile = "exec"
 
-	defaultDockerHost       = "unix:///var/run/docker.sock"
-	defaultDockerVersion    = "v1.22"
-	defaultDockerHttpClient = nil
-	defaultDockerHeaders    = map[string]string{"User-Agent": "engine-api-cli-1.0"}
+	defaultDockerHost    = "unix:///var/run/docker.sock"
+	defaultDockerVersion = "v1.22"
+	defaultDockerHeaders = map[string]string{"User-Agent": "engine-api-cli-1.0"}
 )
 
 func main() {
