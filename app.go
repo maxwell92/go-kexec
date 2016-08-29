@@ -6,7 +6,27 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/xuant/go-kexec/docker"
 )
+
+var (
+	d = *Docker
+)
+
+func init() {
+	cfg := &DockerConfig{
+		HttpHeaders: docker.defaultDockerHeaders,
+		Host:        docker.defaultDockerHost,
+		Version:     docker.defaultDockerVersion,
+		HttpClient:  docker.defaultDockerHttpClient,
+	}
+
+	d, err := docker.NewDocker(cfg)
+	if err != nil {
+		log.Printf("Failed to NewDocker. Error: %s", err)
+	}
+}
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
@@ -19,9 +39,9 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer file.Close()
 
-	out, err := os.Create(ibContext + executionFile)
+	out, err := os.Create(docker.ibContext + docker.executionFile)
 	if err != nil {
-		fmt.Fprintf(w, "Permission denied. Unable to create file "+IBContext+executionFile)
+		fmt.Fprintf(w, "Permission denied. Unable to create file "+docker.ibContext+docker.executionFile)
 		return
 	}
 	defer out.Close()
@@ -31,8 +51,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, err)
 	}
 
-	fmt.Fprintf(w, "File uploaded successfully : ")
-	fmt.Fprintf(w, header.Filename)
+	fmt.Fprintf(w, "File uploaded successfully : %s", header.Filename)
 }
 
 func main() {

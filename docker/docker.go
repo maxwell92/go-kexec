@@ -1,4 +1,4 @@
-package main
+package kexec
 
 import (
 	"fmt"
@@ -15,11 +15,15 @@ import (
 const (
 	ibContext     = "/tmp/faas-imagebuild-context/"
 	executionFile = "exec"
+
+	defaultDockerHost       = "unix:///var/run/docker.sock"
+	defaultDockerVersion    = "v1.22"
+	defaultDockerHttpClient = nil
+	defaultDockerHeaders    = map[string]string{"User-Agent": "engine-api-cli-1.0"}
 )
 
 func main() {
-	defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
-	cli, err := client.NewClient("unix:///var/run/docker.sock", "v1.22", nil, defaultHeaders)
+	cli, err := client.NewClient(defaultHost, defaultVersion, defaultHttpClient, defaultHeaders)
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +60,7 @@ func NewDocker(c *DockerConfig) (*Docker, error) {
 	}
 }
 
-func (d *Docker) BuildFunction(funcName, templateName, funcFile string) error {
+func (d *Docker) BuildFunction(namespace, funcName, templateName string) error {
 	err := setRuntimeTemplate(templateName)
 
 	if err != nil {
@@ -77,6 +81,7 @@ func (d *Docker) BuildFunction(funcName, templateName, funcFile string) error {
 	}
 
 	resp, err := d.client.ImageBuild(context.Background(), ctx, opts)
+	defer resp.Body.Close()
 
 	if err != nil {
 		log.Printf("Failed to build image. Error: %s", err)
@@ -89,15 +94,9 @@ func (d *Docker) BuildFunction(funcName, templateName, funcFile string) error {
 		log.Printf("Failed to read response body. Error: %s", err)
 		return err
 	}
+
 	log.Printf("Image build response Body: %s", string(buf))
 	log.Printf("Image build response OSType: %s", resp.OSType)
-
-	err = resp.Body.Close()
-
-	if err != nil {
-		log.Printf("Failed to close response body. Error: %s", err)
-		return err
-	}
 
 	return nil
 }
@@ -117,7 +116,7 @@ ENTRYPOINT [ "python", "exec" ]
 func setRuntimeTemplate(templateName string) error {
 	switch templateName {
 	case "python27":
-		ioutil.WriteFile("Dockerfile", []byte(python27Template), 0644)
+		ioutil.WriteFile(ibContext+"Dockerfile", []byte(python27Template), 0644)
 		return nil
 	default:
 		return errors.New("Runtime template " + templateName + " invalid or not supported yet.")
