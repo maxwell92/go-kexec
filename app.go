@@ -16,13 +16,6 @@ var (
 	defaultDockerHeaders = map[string]string{"User-Agent": "engine-api-cli-1.0"}
 )
 
-/*
-func uploadHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
-	uploadFile(w, r)
-	d.BuildFunction("xuant", "testfunc", "python27")
-}
-*/
 func uploadFile(w http.ResponseWriter, r *http.Request) error {
 
 	file, header, err := r.FormFile("file")
@@ -72,7 +65,6 @@ func main() {
 			log.Println(err)
 			return
 		}
-		log.Println("File uploaded")
 		if err := d.BuildFunction("xuant", "testfunc", "python27"); err != nil {
 			log.Println(err)
 			return
