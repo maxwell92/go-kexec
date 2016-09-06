@@ -88,14 +88,16 @@
 
 <div id="editor_div">def foo():
     print("ACE Editor is awesome.")
+
+foo()
 </div>
 
 
-<form>
+<form id="codeForm" action="/receive" method="post" enctype="multipart/form-data">
 <button type="button" onclick="myFunction()">Submit</button>
 <hr>
 <p class="codeuploaded">Code Uploaded:</p>
-<textarea id="myTextarea" style="display:none;">Default value</textarea>
+<textarea id="myTextarea" name="codeTextarea" style="display:none;">Default value</textarea>
 </form>
 
 
@@ -108,8 +110,9 @@
 	editor.getSession().setMode("ace/mode/python");
 	
 	function myFunction() {
-		var textarea = document.getElementById("myTextarea")
+		var textarea = document.getElementById("myTextarea");
 		textarea.value = editor.getSession().getValue();
+		document.getElementById("codeForm").submit();
 		textarea.style.display = "block";
 	}
 

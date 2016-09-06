@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/xuant/go-kexec/docker"
 )
@@ -18,31 +18,28 @@ var (
 
 func uploadFile(w http.ResponseWriter, r *http.Request) error {
 
-	file, header, err := r.FormFile("file")
+	code := r.FormValue("codeTextarea")
+	log.Printf("Code uploaded:\n%s", code)
+
+	if code == "" {
+		log.Println("Code is Empty, do nothing.")
+		return fmt.Errorf("Code is empty, do nothing.", nil)
+	}
+
+	exeFile, err := os.Create(docker.IBContext + docker.ExecutionFile)
 
 	if err != nil {
+		fmt.Fprintf(w, "Permission denied. Unable to create execution file %s", filepath.Join(docker.IBContext, docker.ExecutionFile))
+		return err
+	}
+	defer exeFile.Close()
+
+	if _, err = exeFile.WriteString(code); err != nil {
 		fmt.Fprintln(w, err)
 		return err
 	}
 
-	defer file.Close()
-
-	out, err := os.Create(docker.IBContext + docker.ExecutionFile)
-
-	if err != nil {
-		fmt.Fprintf(w, "Permission denied. Unable to create file "+docker.IBContext+docker.ExecutionFile)
-		return err
-	}
-
-	defer out.Close()
-
-	_, err = io.Copy(out, file)
-	if err != nil {
-		fmt.Fprintln(w, err)
-		return err
-	}
-
-	fmt.Fprintf(w, "File uploaded successfully: %s", header.Filename)
+	fmt.Fprintln(w, "Function created.")
 	return nil
 }
 
@@ -65,10 +62,14 @@ func main() {
 			log.Println(err)
 			return
 		}
-		if err := d.BuildFunction("xuant", "testfunc", "python27"); err != nil {
+		if err := d.BuildFunction("xuant", "aceeditor", "python27"); err != nil {
 			log.Println(err)
 			return
 		}
 	})
+
+	fs := http.FileServer(http.Dir("/Users/xuan_tang/goproject/src/github.com/xuant/go-kexec/ui"))
+	http.Handle("/", fs)
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
