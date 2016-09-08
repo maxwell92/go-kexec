@@ -56,7 +56,8 @@ func main() {
 		log.Printf("Failed to NewDocker. Error: %s", err)
 	}
 
-	http.HandleFunc("/receive", func(w http.ResponseWriter, r *http.Request) {
+	// Handle function upload
+	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
 		if err := uploadFile(w, r); err != nil {
 			log.Println(err)
@@ -68,6 +69,7 @@ func main() {
 		}
 	})
 
+	// Handle static files
 	fs := http.FileServer(http.Dir("/Users/xuan_tang/goproject/src/github.com/xuant/go-kexec/ui"))
 	http.Handle("/", fs)
 
