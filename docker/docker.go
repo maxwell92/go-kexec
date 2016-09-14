@@ -40,14 +40,14 @@ type Docker struct {
 	client *client.Client
 }
 
-func NewDocker(c *DockerConfig) (*Docker, error) {
+func NewDocker(c *DockerConfig) *Docker {
 	cli, err := client.NewClient(c.Host, c.Version, c.HttpClient, c.HttpHeaders)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	return &Docker{
 		client: cli,
-	}, nil
+	}
 }
 
 func (d *Docker) BuildFunction(namespace, funcName, templateName string) error {

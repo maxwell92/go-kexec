@@ -96,7 +96,7 @@ const Upload = `<!DOCTYPE html>
 
 <div id="header">
 <h1>Go-Kexec</h1>
-<h2>@Author:Xuan Tang</h2>
+<h2>Hello %s! Thanks for using symcpe-faas.</h2>
 </div> <!-- this closes header -->
 
 <div id="editor_div">def foo():
@@ -106,7 +106,7 @@ foo()
 </div>
 
 
-<form id="codeForm" action="/submit" method="post" enctype="multipart/form-data">
+<form id="codeForm" action="/create" method="post" enctype="multipart/form-data">
 <button type="button" onclick="myFunction()">Submit</button>
 <hr>
 <p class="codeuploaded">Code Uploaded:</p>

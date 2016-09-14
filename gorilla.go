@@ -14,16 +14,18 @@ import (
 )
 
 var (
-	defaultDockerHost    = "unix:///var/run/docker.sock"
-	defaultDockerVersion = "v1.22"
-	defaultDockerHeaders = map[string]string{"User-Agent": "engine-api-cli-1.0"}
+	router        = mux.NewRouter()
+	cookieHandler = securecookie.New(
+		securecookie.GenerateRandomKey(64),
+		securecookie.GenerateRandomKey(32))
 
-	router = mux.NewRouter()
+	d = docker.NewDocker(&docker.DockerConfig{
+		HttpHeaders: map[string]string{"User-Agent": "engin-api-cli-1.0"},
+		Host:        "unix:///var/run/docker.sock",
+		Version:     "v1.22",
+		HttpClient:  nil,
+	})
 )
-
-var cookieHandler = securecookie.New(
-	securecookie.GenerateRandomKey(64),
-	securecookie.GenerateRandomKey(32))
 
 func main() {
 	router.HandleFunc("/", indexPageHandler)
@@ -39,29 +41,36 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func createFunctionHandler(w http.ResponseWriter, r *http.Request) {
-	code := r.FormValue("codeTextarea")
-	log.Printf("Code uploaded:\n%s", code)
-	if code == "" {
-		http.Redirect(response, request, "/internal", 302)
-		return
+func createFunctionHandler(response http.ResponseWriter, request *http.Request) {
+	userName := getUserName(request)
+	if userName == "" {
+		http.Redirect(response, request, "/", 302)
+	} else {
+		code := request.FormValue("codeTextarea")
+		log.Printf("Code uploaded:\n%s", code)
+		if code == "" {
+			http.Redirect(response, request, "/internal", 302)
+			return
+		}
+
+		exeFileName := filepath.Join(docker.IBContext, docker.ExecutionFile)
+		exeFile, err := os.Create(exeFileName)
+
+		if err != nil {
+			fmt.Fprintf(response, "Permission denied. Unable to create execution file %s", exeFileName)
+			return
+		}
+		defer exeFile.Close()
+
+		if _, err = exeFile.WriteString(code); err != nil {
+			fmt.Fprintln(response, err)
+			return
+		}
+
+		if err = d.BuildFunction("xuant", "gorilla", "python27"); err != nil {
+			fmt.Fprintln(response, err)
+		}
 	}
-
-	exeFile, err := os.Create(filepath.Join(docker.IBContext, docker.ExecutionFile))
-
-	if err != nil {
-		fmt.Fprintf(w, "Permission denied. Unable to create execution file %s", filepath.Join(docker.IBContext, docker.ExecutionFile))
-		return
-	}
-	defer exeFile.Close()
-
-	if _, err = exeFile.WriteString(code); err != nil {
-		fmt.Fprintln(w, err)
-		return
-	}
-
-	fmt.Fprintln(w, "Function created.")
-	return
 }
 
 func indexPageHandler(response http.ResponseWriter, request *http.Request) {
