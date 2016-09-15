@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -34,8 +35,10 @@ func main() {
 	router.HandleFunc("/login", loginHandler).Methods("POST")
 	router.HandleFunc("/logout", logoutHandler).Methods("POST")
 
+	/* ... Static files not used currently
 	staticServer := http.StripPrefix("/ui/", http.FileServer(http.Dir("./ui")))
 	router.PathPrefix("/ui").Handler(staticServer)
+	*/
 
 	http.Handle("/", router)
 	http.ListenAndServe(":8080", nil)
@@ -44,32 +47,52 @@ func main() {
 func createFunctionHandler(response http.ResponseWriter, request *http.Request) {
 	userName := getUserName(request)
 	if userName == "" {
-		http.Redirect(response, request, "/", 302)
+		http.Redirect(response, request, "/", http.StatusFound)
 	} else {
+		// Read function code from the form
+		// Before the function can be created, several steps needs to be
+		// executed:
+		//   1. Check if uploaded function code is empty
+		//   2. Create the execution file for the function
+		//   3. Write the function code to the execution file
+		//   4. Build the function (ie build docker image)
+		functionName := request.FormValue("functionName")
+		runtime := request.FormValue("runtime")
 		code := request.FormValue("codeTextarea")
-		log.Printf("Code uploaded:\n%s", code)
-		if code == "" {
-			http.Redirect(response, request, "/internal", 302)
+		if functionName == "" || runtime == "" || code == "" {
+			err := errors.New("Something's wrong with FunctionName/Runtime/Code.")
+			log.Printf("Function failed: something's wrong with Function Name/Runtime/Code.")
+			http.Error(response, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Printf("Code uploaded:\n%s", code)
+		log.Printf("Start creating function \"%s\" with runtime \"%s\"", functionName, runtime)
 
 		exeFileName := filepath.Join(docker.IBContext, docker.ExecutionFile)
 		exeFile, err := os.Create(exeFileName)
 
 		if err != nil {
-			fmt.Fprintf(response, "Permission denied. Unable to create execution file %s", exeFileName)
+			log.Printf("Function failed: %s", err)
+			http.Error(response, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer exeFile.Close()
 
 		if _, err = exeFile.WriteString(code); err != nil {
-			fmt.Fprintln(response, err)
+			log.Printf("Function failed: %s", err)
+			http.Error(response, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if err = d.BuildFunction("xuant", "gorilla", "python27"); err != nil {
-			fmt.Fprintln(response, err)
+		if err = d.BuildFunction(userName, functionName, runtime); err != nil {
+			log.Printf("Function failed: %s", err)
+			http.Error(response, err.Error(), http.StatusInternalServerError)
+			return
 		}
+
+		// If all the above operation succeeded, the function is created
+		// successfully.
+		fmt.Fprintf(response, html.FunctionCreatedPage)
 	}
 }
 
@@ -86,21 +109,21 @@ func loginHandler(response http.ResponseWriter, request *http.Request) {
 		setSession(name, response)
 		redirectTarget = "/internal"
 	}
-	http.Redirect(response, request, redirectTarget, 302)
+	http.Redirect(response, request, redirectTarget, http.StatusFound)
 }
 
 func internalPageHandler(response http.ResponseWriter, request *http.Request) {
 	userName := getUserName(request)
 	if userName != "" {
-		fmt.Fprintf(response, html.Upload, userName)
+		fmt.Fprintf(response, html.InternalPage, userName)
 	} else {
-		http.Redirect(response, request, "/", 302)
+		http.Redirect(response, request, "/", http.StatusFound)
 	}
 }
 
 func logoutHandler(response http.ResponseWriter, request *http.Request) {
 	clearSession(response)
-	http.Redirect(response, request, "/", 302)
+	http.Redirect(response, request, "/", http.StatusFound)
 }
 
 func setSession(userName string, response http.ResponseWriter) {

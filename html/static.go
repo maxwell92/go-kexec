@@ -11,19 +11,19 @@ const IndexPage = `
 </form>
 `
 
-const Upload = `<!DOCTYPE html>
+const InternalPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <title>SymCPE Function-as-a-Service</title>
 <style type="text/css" media="screen">
-	#editor_div { 
-		margin-left: 15px;
-		margin-top: 15px;
-		width: 1000px;
-		height: 400px;
-	}
+  #editor_div { 
+    margin-left: 15px;
+    margin-top: 30px;
+    width: 1000px;
+    height: 400px;
+  }
 
-	#wrapper { 
+  #wrapper { 
          width: 1000px;
          margin:0 auto;
    }
@@ -42,21 +42,21 @@ const Upload = `<!DOCTYPE html>
     }
 
    #myTextarea {
-   	            position: relative;
-   	            top:430px;
-   	            left:15px;
-   	            width:980px;
-   	            height:100px;
-   	            border-style: solid;
-   	            border-color:#666;
-   	            padding:10px;
-   	            border-radius: 8px;
-   	            font:0.8em Verdana, Arial, sans-serif;
-   	            color:#666;
+                position: relative;
+                top:430px;
+                left:15px;
+                width:980px;
+                height:100px;
+                border-style: solid;
+                border-color:#666;
+                padding:10px;
+                border-radius: 8px;
+                font:0.8em Verdana, Arial, sans-serif;
+                color:#666;
    }
     
     form  {
-    	   text-align:center;
+         text-align:center;
     }
 
     button {
@@ -74,18 +74,18 @@ const Upload = `<!DOCTYPE html>
     }
 
      hr  {
-     	 position: relative;
-     	 top:440px;
-     	 left: 15px;
-     	 color:#666;
+       position: relative;
+       top:440px;
+       left: 15px;
+       color:#666;
      }
      
      .codeuploaded {
-     	            position: relative;
-     	            top:430px;
-     	            left: -430px;
-     	            font:0.8em Verdana, Arial, sans-serif;
-     	            color:#666;
+                  position: relative;
+                  top:430px;
+                  left: -430px;
+                  font:0.8em Verdana, Arial, sans-serif;
+                  color:#666;
      }
 
 </style>
@@ -96,7 +96,7 @@ const Upload = `<!DOCTYPE html>
 
 <div id="header">
 <h1>Go-Kexec</h1>
-<h2>Hello %s! Thanks for using symcpe-faas.</h2>
+<h2>Welcome %s! Thanks for using Go-Kexec</h2>
 </div> <!-- this closes header -->
 
 <div id="editor_div">def foo():
@@ -107,6 +107,10 @@ foo()
 
 
 <form id="codeForm" action="/create" method="post" enctype="multipart/form-data">
+<input type="text" name="functionName" value="default_function">
+<select name="runtime">
+<option value="python27">Python2.7</option>
+</select>
 <button type="button" onclick="myFunction()">Submit</button>
 <hr>
 <p class="codeuploaded">Code Uploaded:</p>
@@ -118,16 +122,16 @@ foo()
 <script src="http://d1n0x3qji82z53.cloudfront.net/src-min-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
 <script>
 
-	var editor = ace.edit("editor_div");
-	editor.setTheme("ace/theme/monokai");
-	editor.getSession().setMode("ace/mode/python");
-	
-	function myFunction() {
-		var textarea = document.getElementById("myTextarea");
-		textarea.value = editor.getSession().getValue();
-		document.getElementById("codeForm").submit();
-		textarea.style.display = "block";
-	}
+  var editor = ace.edit("editor_div");
+  editor.setTheme("ace/theme/monokai");
+  editor.getSession().setMode("ace/mode/python");
+  
+  function myFunction() {
+    var textarea = document.getElementById("myTextarea");
+    textarea.value = editor.getSession().getValue();
+    document.getElementById("codeForm").submit();
+    textarea.style.display = "block";
+  }
 
 </script>
 
@@ -135,4 +139,13 @@ foo()
 
 </body>
 </html>
+`
+
+const FunctionFailedErrorPage = `
+<h1>Function failed. Redirecting...<h1>
+%s
+`
+
+const FunctionCreatedPage = `
+<h1>Function created successfully.<h1>
 `
