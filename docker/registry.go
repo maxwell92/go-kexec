@@ -4,7 +4,9 @@ package docker
 // created function to the registry, there is a bug that is not
 // resolved in the master branch of "github.com/docker/docker".
 // The bug can be found here:
+//
 //    https://github.com/docker/docker/issues/26781
+//
 //
 // The following is just a hack, simply calling command line from
 // golang code.
@@ -13,5 +15,28 @@ package docker
 // should be replaced with real go code. At the meantime, all the
 // dev regarding this issue can be found in branch "registry-test".
 // Do `git chechout registry-test` to check it out.
-//
-// Author: Xuan Tang
+
+import (
+	"errors"
+	"log"
+	"os/exec"
+)
+
+func RegisterFunction(namespace, funcName string) error {
+	// cmd
+	app := "docker"
+
+	// args
+	arg0 := "push"
+	arg1 := Registry + "/" + namespace + "/" + funcName
+	cmd := exec.Command(app, arg0, arg1)
+	stdout, err := cmd.Output()
+
+	if err != nil {
+		log.Printf("Failed to execute exec command `docker push` %s\n.", err)
+		return errors.New("Failed to execuate exec command `docker push`")
+	}
+
+	log.Printf(string(stdout))
+	return nil
+}

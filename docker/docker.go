@@ -13,20 +13,22 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/builder/dockerignore"
+	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/docker/docker/pkg/streamformatter"
-	"github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types"
 )
 
 var (
 	IBContext     = "/tmp/faas-imagebuild-context/"
 	RelDockerfile = "Dockerfile"
 	ExecutionFile = "exec"
+
+	Registry = "registry.paas.symcpe.com:443"
 )
 
 type DockerConfig struct {
@@ -101,7 +103,7 @@ func (d *Docker) BuildFunction(namespace, funcName, templateName string) error {
 	var body io.Reader = progress.NewProgressReader(buildCtx, progressOutput, 0, "", "Sending build context to Docker daemon")
 
 	opts := types.ImageBuildOptions{
-		Tags:       []string{namespace + "/" + funcName},
+		Tags:       []string{Registry + "/" + namespace + "/" + funcName},
 		Dockerfile: RelDockerfile,
 		Squash:     true,
 	}
