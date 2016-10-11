@@ -51,19 +51,6 @@ func main() {
 
 }
 
-type LogType string
-
-const (
-	Completed LogType = "completed"
-	Failed    LogType = "failed"
-)
-
-type FunctionLog struct {
-	Timestamp time.Time
-	Type      LogType
-	Msg       string
-}
-
 type KexecConfig struct {
 	KubeConfig string
 }
@@ -72,6 +59,12 @@ type Kexec struct {
 	Clientset *kubernetes.Clientset
 }
 
+// NewKexec creates a new Kexec instance which contains all the methods
+// to manipulate the specified kubernetes/openshift cluster.
+//
+// Some of the main methods:
+// 1. Call a function
+// 2. Get Log from a function call
 func NewKexec(c *KexecConfig) (*Kexec, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", c.KubeConfig)
 	if err != nil {
@@ -88,6 +81,8 @@ func NewKexec(c *KexecConfig) (*Kexec, error) {
 	}, nil
 }
 
+// CallFunction will create a Job template and then create the Job
+// instance against the specified kubernetes/openshift cluster.
 func (k *Kexec) CallFunction(function, image, namespace string, labels map[string]string) error {
 	uuid, err := uuid.NewTimeBased()
 	if err != nil {
@@ -104,6 +99,13 @@ func (k *Kexec) CallFunction(function, image, namespace string, labels map[strin
 	return nil
 }
 
+// GetFunctionLog gets the log information for a pod execution.
+// This function doesn't consider multiple pods for one execution;
+// if there are multiple pods for this function execution, it will
+// only return one of them.
+//
+// TODO: Logs should be return in full if there are multiple pods
+//       for one function execution.
 func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, error) {
 	podlist, err := k.getFunctionPods(funcName, uuidStr, namespace)
 	if err != nil {
@@ -131,10 +133,13 @@ func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, err
 
 }
 
+// public fuction to get pod(s) that ran a specific function execution.
 func (k *Kexec) GetFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
 	return k.getFunctionPods(funcName, uuidStr, namespace)
 }
 
+// private function to help get the exact pod(s) that ran a specific
+// function execution.
 func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
 	// funcUUID is the label of the pod that ran the job
 	funcUUID := funcName + "-" + uuidStr
@@ -152,6 +157,14 @@ func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodLis
 	return k.Clientset.Core().Pods(namespace).List(listOptions)
 }
 
+// createJobTemplate create a Job template, which will be used to
+// create a Job instance against the specified kubernetes/openshift
+// cluster.
+//
+// For now, user only provide image, jobname, namespace and labels.
+// Other features like parallelism, etc., cannot be specified.
+//
+// TODO: 1. make parallelism configurable
 func createJobTemplate(image, jobname, namespace string, labels map[string]string) *batchv1.Job {
 	return &batchv1.Job{
 		TypeMeta: unversioned.TypeMeta{
