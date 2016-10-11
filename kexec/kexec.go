@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/wayn3h0/go-uuid"
@@ -42,10 +43,11 @@ func main() {
 		}
 		fmt.Printf("Elapsed: %s", time.Since(start))
 	*/
-	err = k.GetFunctionLog("helloworld", "a74a031b-8f23-11e6-80a2-b8e85639d46e", "default")
+	funcLog, err := k.GetFunctionLog("helloworld", "a74a031b-8f23-11e6-80a2-b8e85639d46e", "default")
 	if err != nil {
 		panic(err)
 	}
+	fmt.Printf("Function Log:\n %s", string(funcLog))
 
 }
 
@@ -102,7 +104,38 @@ func (k *Kexec) CallFunction(function, image, namespace string, labels map[strin
 	return nil
 }
 
-func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) error {
+func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, error) {
+	podlist, err := k.getFunctionPods(funcName, uuidStr, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(podlist.Items) < 1 {
+		return nil, fmt.Errorf("No pod found for function %s - execution %s.", funcName, uuidStr)
+	}
+
+	// Only return the log of the first pod
+	podName := podlist.Items[0].Name
+	opts := &v1.PodLogOptions{
+		Follow:     true,
+		Timestamps: true,
+	}
+
+	response, err := k.Clientset.Core().Pods(namespace).GetLogs(podName, opts).Stream()
+	if err != nil {
+		return nil, err
+	}
+	defer response.Close()
+
+	return ioutil.ReadAll(response)
+
+}
+
+func (k *Kexec) GetFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
+	return k.getFunctionPods(funcName, uuidStr, namespace)
+}
+
+func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
 	// funcUUID is the label of the pod that ran the job
 	funcUUID := funcName + "-" + uuidStr
 
@@ -116,12 +149,7 @@ func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) error {
 		LabelSelector: jobLabelSelector,
 	}
 
-	pods, err := k.Clientset.Core().Pods(namespace).List(listOptions)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("There are %d pods in the cluster that matches with jobLabelSelector", len(pods.Items))
-	return nil
+	return k.Clientset.Core().Pods(namespace).List(listOptions)
 }
 
 func createJobTemplate(image, jobname, namespace string, labels map[string]string) *batchv1.Job {
