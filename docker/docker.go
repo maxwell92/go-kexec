@@ -27,32 +27,29 @@ var (
 	IBContext     = "/tmp/faas-imagebuild-context/"
 	RelDockerfile = "Dockerfile"
 	ExecutionFile = "exec"
-
-	Registry = "registry.paas.symcpe.com:443"
 )
 
-type DockerConfig struct {
+type Docker struct {
 	HttpHeaders map[string]string
 	Host        string
 	Version     string
 	HttpClient  *http.Client
 }
 
-type Docker struct {
-	client *client.Client
-}
-
-func NewDocker(c *DockerConfig) *Docker {
-	cli, err := client.NewClient(c.Host, c.Version, c.HttpClient, c.HttpHeaders)
-	if err != nil {
-		panic(err)
-	}
+func NewDocker(httpHeader map[string]string, host, version string, httpClient *http.Client) *Docker {
 	return &Docker{
-		client: cli,
+		HttpHeaders: httpHeader,
+		Host:        host,
+		Version:     version,
+		HttpClient:  httpClient,
 	}
 }
 
-func (d *Docker) BuildFunction(namespace, funcName, templateName string) error {
+func (d *Docker) initCli() (*client.Client, error) {
+	return client.NewClient(d.Host, d.Version, d.HttpClient, d.HttpHeaders)
+}
+
+func (d *Docker) BuildFunction(registry, namespace, funcName, templateName string) error {
 	if _, err := os.Stat(IBContext + ExecutionFile); err != nil {
 		log.Printf("Failed build function. Error: Execution file not found.")
 		return errors.New("Execution file not found.")
@@ -103,12 +100,19 @@ func (d *Docker) BuildFunction(namespace, funcName, templateName string) error {
 	var body io.Reader = progress.NewProgressReader(buildCtx, progressOutput, 0, "", "Sending build context to Docker daemon")
 
 	opts := types.ImageBuildOptions{
-		Tags:       []string{Registry + "/" + namespace + "/" + funcName},
+		Tags:       []string{registry + "/" + namespace + "/" + funcName},
 		Dockerfile: RelDockerfile,
 		Squash:     true,
 	}
 
-	resp, err := d.client.ImageBuild(context.Background(), body, opts)
+	cli, err := d.initCli()
+
+	if err != nil {
+		log.Printf("Failed to init cli. Error: %s", err)
+		return err
+	}
+
+	resp, err := cli.ImageBuild(context.Background(), body, opts)
 
 	if err != nil {
 		log.Printf("Failed to build image. Error: %s", err)

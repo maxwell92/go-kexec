@@ -4,12 +4,11 @@ Use of this source code is governed by a license
 that can be found in the LICENSE file.
 */
 
-package main
+package kexec
 
 import (
 	"fmt"
 	"io/ioutil"
-	"time"
 
 	"github.com/wayn3h0/go-uuid"
 	"k8s.io/client-go/1.4/kubernetes"
@@ -21,6 +20,7 @@ import (
 	"k8s.io/client-go/1.4/tools/clientcmd"
 )
 
+/*
 func main() {
 	c := &KexecConfig{
 		KubeConfig: "./fakekubeconfig",
@@ -31,18 +31,6 @@ func main() {
 		panic(err)
 	}
 
-	/*
-		labels := make(map[string]string)
-		labels["purpose"] = "benchmark"
-		start := time.Now()
-		for i := 0; i < 100; i++ {
-			err = k.CallFunction("helloworld", "xuant/aceeditor", "default", labels)
-			if err != nil {
-				panic(err)
-			}
-		}
-		fmt.Printf("Elapsed: %s", time.Since(start))
-	*/
 	funcLog, err := k.GetFunctionLog("helloworld", "a74a031b-8f23-11e6-80a2-b8e85639d46e", "default")
 	if err != nil {
 		panic(err)
@@ -50,6 +38,7 @@ func main() {
 	fmt.Printf("Function Log:\n %s", string(funcLog))
 
 }
+*/
 
 type KexecConfig struct {
 	KubeConfig string

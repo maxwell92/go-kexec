@@ -22,13 +22,13 @@ import (
 	"os/exec"
 )
 
-func RegisterFunction(namespace, funcName string) error {
+func RegisterFunction(registry, namespace, funcName string) error {
 	// cmd
 	app := "docker"
 
 	// args
 	arg0 := "push"
-	arg1 := Registry + "/" + namespace + "/" + funcName
+	arg1 := registry + "/" + namespace + "/" + funcName
 	cmd := exec.Command(app, arg0, arg1)
 	stdout, err := cmd.Output()
 
