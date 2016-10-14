@@ -124,6 +124,10 @@ func CallFunctionHandler(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
+func getFunctionName(request) {
+
+}
+
 func CreateFunctionHandler(response http.ResponseWriter, request *http.Request) {
 	userName := getUserName(request)
 	if userName == "" {
