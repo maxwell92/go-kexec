@@ -149,3 +149,7 @@ const FunctionFailedErrorPage = `
 const FunctionCreatedPage = `
 <h1>Function created successfully.<h1>
 `
+
+const FunctionCalledPage = `
+<h1>Function called successfully.<h1>
+`

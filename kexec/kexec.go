@@ -72,19 +72,22 @@ func NewKexec(c *KexecConfig) (*Kexec, error) {
 
 // CallFunction will create a Job template and then create the Job
 // instance against the specified kubernetes/openshift cluster.
-func (k *Kexec) CallFunction(function, image, namespace string, labels map[string]string) error {
-	uuid, err := uuid.NewTimeBased()
-	if err != nil {
-		return err
-	}
-	jobname := function + "-" + uuid.String()
-	fmt.Println(jobname)
+func (k *Kexec) CallFunction(jobname, image, namespace string, labels map[string]string) error {
+	/*
+		uuid, err := uuid.NewTimeBased()
+		if err != nil {
+			return err
+		}
+		jobname := function + "-" + uuid.String()
+		fmt.Println(jobname)
+	*/
 	template := createJobTemplate(image, jobname, namespace, labels)
 
 	_, err = k.Clientset.Batch().Jobs(namespace).Create(template)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -96,6 +99,7 @@ func (k *Kexec) CallFunction(function, image, namespace string, labels map[strin
 // TODO: Logs should be return in full if there are multiple pods
 //       for one function execution.
 func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, error) {
+
 	podlist, err := k.getFunctionPods(funcName, uuidStr, namespace)
 	if err != nil {
 		return nil, err
@@ -113,13 +117,14 @@ func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, err
 	}
 
 	response, err := k.Clientset.Core().Pods(namespace).GetLogs(podName, opts).Stream()
+
 	if err != nil {
 		return nil, err
 	}
+
 	defer response.Close()
 
 	return ioutil.ReadAll(response)
-
 }
 
 // public fuction to get pod(s) that ran a specific function execution.

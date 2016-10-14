@@ -50,11 +50,25 @@ var (
 
 func main() {
 
-	router.HandleFunc("/", indexPageHandler)
-	router.HandleFunc("/create", createFunctionHandler)
-	router.HandleFunc("/internal", internalPageHandler)
-	router.HandleFunc("/login", loginHandler).Methods("POST")
-	router.HandleFunc("/logout", logoutHandler).Methods("POST")
+	// IndexPageHandler handles index page (i.e. login page)
+	router.HandleFunc("/", IndexPageHandler)
+
+	// LoginHandler create session from login page information,
+	// do basic authentication, and redirect to the internal
+	// control panel if authenticated.
+	//
+	// LogoutHandler clears session and redirect to index page.
+	router.HandleFunc("/login", LoginHandler).Methods("POST")
+	router.HandleFunc("/logout", LogoutHandler).Methods("POST")
+
+	// InternalPageHandler displays the internal control panel
+	router.HandleFunc("/internal", InternalPageHandler)
+
+	// CreateFunctionHandler handles `create function` request
+	router.HandleFunc("/create", CreateFunctionHandler)
+
+	// CallFunctionHandler handles `call function` request
+	router.HandleFunc("/call", CallFunctionHandler)
 
 	/* ... Static files not used currently
 	staticServer := http.StripPrefix("/ui/", http.FileServer(http.Dir("./ui")))
@@ -65,21 +79,52 @@ func main() {
 	panic(http.ListenAndServe(":8080", nil))
 }
 
-func callFunctionHandler(response http.ResponseWriter, request *http.Request) {
+func CallFunctionHandler(response http.ResponseWriter, request *http.Request) {
+
 	userName := getUserName(request)
-	if userName == "" {
+	functionName := getFunctionName(request)
+
+	if userName == "" || functionName == "" {
 
 		// Empty username is not allowed to call function
 		http.Redirect(response, request, "/", http.StatusFound)
 
 	} else {
 
-		// TODO
+		// create a uuid for each function call. This uuid can be
+		// seen as the execution id for the function (notice there
+		// are multiple executions for a single function)
+		uuid, err := uuid.NewTimeBased()
 
+		if err != nil {
+
+			// Log on server side and notify client
+			log.Printf("Failed to create uuid for function call. Error: %s", err)
+			http.Error(response, err.Error(), http.StatusInternalServerError)
+
+			// Return immediately when there is an error
+			return
+		}
+
+		uuidStr := uuid.String() // uuidStr needed when fetching log
+
+		jobname := functionName + "-" + uuidStr
+		image := defaultDockerRegistry + "/" + userName + "/" + functionName
+		labels = make(map[string]string)
+
+		if err = k.CallFunction(jobname, image, userName, labels); err != nil {
+
+			log.Printf("Failed to call function %s. Error: %s", functionName, err)
+			http.Error(response, err.Error(), http.StatusInternalServerError)
+
+			return
+		}
+
+		fmt.Fprintf(response, html.FunctionCalledPage)
 	}
 }
 
-func createFunctionHandler(response http.ResponseWriter, request *http.Request) {
+func CreateFunctionHandler(response http.ResponseWriter, request *http.Request) {
 	userName := getUserName(request)
 	if userName == "" {
 
@@ -149,11 +194,11 @@ func createFunctionHandler(response http.ResponseWriter, request *http.Request) 
 	}
 }
 
-func indexPageHandler(response http.ResponseWriter, request *http.Request) {
+func IndexPageHandler(response http.ResponseWriter, request *http.Request) {
 	fmt.Fprintf(response, html.IndexPage)
 }
 
-func loginHandler(response http.ResponseWriter, request *http.Request) {
+func LoginHandler(response http.ResponseWriter, request *http.Request) {
 	name := request.FormValue("name")
 	pass := request.FormValue("password")
 	redirectTarget := "/"
@@ -165,7 +210,7 @@ func loginHandler(response http.ResponseWriter, request *http.Request) {
 	http.Redirect(response, request, redirectTarget, http.StatusFound)
 }
 
-func internalPageHandler(response http.ResponseWriter, request *http.Request) {
+func InternalPageHandler(response http.ResponseWriter, request *http.Request) {
 	userName := getUserName(request)
 	if userName != "" {
 		fmt.Fprintf(response, html.InternalPage, userName)
@@ -174,7 +219,7 @@ func internalPageHandler(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func logoutHandler(response http.ResponseWriter, request *http.Request) {
+func LogoutHandler(response http.ResponseWriter, request *http.Request) {
 	clearSession(response)
 	http.Redirect(response, request, "/", http.StatusFound)
 }
