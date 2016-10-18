@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
+	"github.com/wayn3h0/go-uuid"
 	"github.com/xuant/go-kexec/docker"
 	"github.com/xuant/go-kexec/html"
 	"github.com/xuant/go-kexec/kexec"
@@ -110,7 +111,7 @@ func CallFunctionHandler(response http.ResponseWriter, request *http.Request) {
 
 		jobname := functionName + "-" + uuidStr
 		image := defaultDockerRegistry + "/" + userName + "/" + functionName
-		labels = make(map[string]string)
+		labels := make(map[string]string)
 
 		if err = k.CallFunction(jobname, image, userName, labels); err != nil {
 
@@ -124,8 +125,8 @@ func CallFunctionHandler(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func getFunctionName(request) {
-
+func getFunctionName(request *http.Request) string {
+	return "Not implemented yet."
 }
 
 func CreateFunctionHandler(response http.ResponseWriter, request *http.Request) {

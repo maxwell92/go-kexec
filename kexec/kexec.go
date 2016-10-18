@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/wayn3h0/go-uuid"
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
 	unversioned "k8s.io/client-go/1.4/pkg/api/unversioned"
@@ -83,7 +82,7 @@ func (k *Kexec) CallFunction(jobname, image, namespace string, labels map[string
 	*/
 	template := createJobTemplate(image, jobname, namespace, labels)
 
-	_, err = k.Clientset.Batch().Jobs(namespace).Create(template)
+	_, err := k.Clientset.Batch().Jobs(namespace).Create(template)
 	if err != nil {
 		return err
 	}
