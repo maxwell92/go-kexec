@@ -219,7 +219,23 @@ func LoginHandler(response http.ResponseWriter, request *http.Request) {
 		// ... check credentials
 		ok, err := checkCredentials(name, pass)
 		if !ok {
-			http.Error(response, err.Error(), http.StatusInternalServerError)
+			errMsg := err.Error()
+			// Check if it is a LDAP specific error
+			for code, msg := range ldap.LDAPResultCodeMap {
+				if ldap.IsErrorWithCode(err, code) {
+					errMsg = msg
+					break
+				}
+			}
+			fmt.Fprintf(response, "<h1>Login</h1>"+
+				"<p>Error: %s</p>"+
+				"<form method=\"post\" action=\"/login\">"+
+				"<label for=\"name\">User name</label>"+
+				"<input type=\"text\" id=\"name\" name=\"name\">"+
+				"<label for=\"password\">Password</label>"+
+				"<input type=\"password\" id=\"password\" name=\"password\">"+
+				"<button type=\"submit\">Login</button>"+
+				"</form>", errMsg)
 			return
 		}
 		setSession(name, response)
