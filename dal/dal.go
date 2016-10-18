@@ -1,4 +1,4 @@
-package main
+package dal
 
 import (
 	"database/sql"
@@ -9,36 +9,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 )
-
-type Group struct {
-	ID      string
-	Name    string
-	Created time.Time
-	Users   []User
-}
-
-type User struct {
-	ID      string
-	Name    string
-	Created time.Time
-}
-
-type Function struct {
-	ID            string
-	UserID        string
-	Name          string
-	Content       string
-	Created       time.Time
-	Updated       time.Time
-	LastExecution time.Time
-}
-
-type FunctionExecution struct {
-	ID         string
-	FunctionID string
-	Log        string
-	Timestamp  time.Time
-}
 
 type DalConfig struct {
 	// data source
@@ -65,54 +35,6 @@ type MySQL struct {
 	usersTable      string
 	functionsTable  string
 	executionsTable string
-}
-
-func main() {
-	config := &DalConfig{
-		dbhost:   "100.73.145.91",
-		username: "kexec",
-		password: "password",
-
-		dbname: "kexec",
-
-		usersTable:      "users",
-		functionsTable:  "functions",
-		executionsTable: "executions",
-	}
-
-	dal, err := NewMySQL(config)
-
-	if err != nil {
-		panic(err)
-	}
-
-	if err = dal.Ping(); err != nil {
-		panic(err)
-	}
-
-	testUsername := "TestUser"
-	testFuncname := "TestFunc"
-	testFuncContent := `
-	def foo():
-	    print("Hello World")
-	foo()
-	`
-
-	log.Printf("Inserting user...")
-	lastId, rowCount, err := dal.PutUserIfNotExisted("", testUsername)
-	if err != nil {
-		panic(err)
-	}
-
-	log.Printf("Last ID: %d, Rows affected: %d", lastId, rowCount)
-
-	log.Printf("Inserting function...")
-	lastId, rowCount, err = dal.PutFunctionIfNotExisted(testUsername, testFuncname, testFuncContent, -1)
-	if err != nil {
-		panic(err)
-	}
-
-	log.Printf("Last ID: %d, Rows affected: %d", lastId, rowCount)
 }
 
 func NewMySQL(config *DalConfig) (*MySQL, error) {
