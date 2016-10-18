@@ -182,7 +182,9 @@ foo()</div>
         <h3>Pineapple</h3>
         <p>%s</p>
       </div>
-           
+      <div id="logout">
+        <a href="/logout">Log Out</a>
+      </div>
     </div>
 
 

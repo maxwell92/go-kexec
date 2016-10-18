@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"github.com/xuant/go-kexec/docker"
 	"github.com/xuant/go-kexec/html"
 	"github.com/xuant/go-kexec/kexec"
+	"gopkg.in/ldap.v2"
 )
 
 var (
@@ -60,7 +62,7 @@ func main() {
 	//
 	// LogoutHandler clears session and redirect to index page.
 	router.HandleFunc("/login", LoginHandler).Methods("POST")
-	router.HandleFunc("/logout", LogoutHandler).Methods("POST")
+	router.HandleFunc("/logout", LogoutHandler)
 
 	// InternalPageHandler displays the internal control panel
 	router.HandleFunc("/internal", InternalPageHandler)
@@ -200,7 +202,13 @@ func CreateFunctionHandler(response http.ResponseWriter, request *http.Request) 
 }
 
 func IndexPageHandler(response http.ResponseWriter, request *http.Request) {
-	fmt.Fprintf(response, html.IndexPage)
+	userName := getUserName(request)
+	if userName != "" {
+		//Already logged in, show internal page
+		fmt.Fprintf(response, html.InternalPage, userName)
+	} else {
+		fmt.Fprintf(response, html.IndexPage)
+	}
 }
 
 func LoginHandler(response http.ResponseWriter, request *http.Request) {
@@ -209,6 +217,11 @@ func LoginHandler(response http.ResponseWriter, request *http.Request) {
 	redirectTarget := "/"
 	if name != "" && pass != "" {
 		// ... check credentials
+		ok, err := checkCredentials(name, pass)
+		if !ok {
+			http.Error(response, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		setSession(name, response)
 		redirectTarget = "/internal"
 	}
@@ -226,6 +239,7 @@ func InternalPageHandler(response http.ResponseWriter, request *http.Request) {
 
 func LogoutHandler(response http.ResponseWriter, request *http.Request) {
 	clearSession(response)
+	log.Println("Logged out")
 	http.Redirect(response, request, "/", http.StatusFound)
 }
 
@@ -261,4 +275,47 @@ func getUserName(request *http.Request) (userName string) {
 		}
 	}
 	return userName
+}
+
+func checkCredentials(name string, pass string) (bool, error) {
+	var l *ldap.Conn
+	var err error
+
+	servers := []string{"ds.symcpe.net"}
+	port := 636
+	retries := 3
+	username := fmt.Sprintf("uid=%s,ou=People,dc=mgmt,dc=symcpe,dc=net", name)
+
+	log.Println("Authenticating user", name)
+
+	//Connect to LDAP servers with retries
+	for i := 0; i < retries; i++ {
+		for _, s := range servers {
+			log.Println("Connecting to LDAP server", s, "......")
+			l, err = ldap.DialTLS("tcp", fmt.Sprintf("%s:%d", s, port),
+				&tls.Config{ServerName: s})
+			if err == nil {
+				break
+			}
+		}
+		if err == nil {
+			log.Println("Connected")
+			break
+		}
+	}
+
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	defer l.Close()
+
+	//Bind
+	err = l.Bind(username, pass)
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	log.Printf("Bound user %s\n", name)
+	return true, nil
 }
