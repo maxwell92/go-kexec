@@ -2,8 +2,11 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -18,10 +21,7 @@ import (
 	"gopkg.in/ldap.v2"
 )
 
-var (
-	// default docker registry
-	defaultDockerRegistry = "registry.paas.symcpe.com:443"
-)
+var argConfigFile = flag.String("config", "", "Config file")
 
 // Error represents a handler error. It provides methods for a HTTP status
 // code and embeds the built-in error interface.
@@ -47,14 +47,14 @@ func (se StatusError) Status() int {
 }
 
 type appConfig struct {
-	dockerRegistry string
-	ldapcfg        *ldapConfig
+	DockerRegistry string
+	LDAPcfg        ldapConfig
 }
 type ldapConfig struct {
-	ldapServer  []string
-	ldapPort    int
-	ldapRetries int
-	ldapBaseDn  string
+	LDAPServer  []string
+	LDAPPort    int
+	LDAPRetries int
+	LDAPBaseDn  string
 }
 type appContext struct {
 	d             *docker.Docker
@@ -86,6 +86,17 @@ func (ah appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
+	configFile, err := ioutil.ReadFile(*argConfigFile)
+	if err != nil {
+		log.Fatalf("Cannot read config file %s: %v\n", *argConfigFile, err)
+	}
+	var conf appConfig
+	err = json.Unmarshal(configFile, &conf)
+	if err != nil {
+		log.Fatalf("Cannot load config file %s: %v\n", *argConfigFile, err)
+	}
+
 	// cookie handling
 	cookieHandler := securecookie.New(
 		securecookie.GenerateRandomKey(64),
@@ -111,7 +122,7 @@ func main() {
 		KubeConfig: os.Getenv("HOME") + "/.kube/config",
 	})
 
-	context := &appContext{d: d, k: k, cookieHandler: cookieHandler, conf: nil}
+	context := &appContext{d: d, k: k, cookieHandler: cookieHandler, conf: &conf}
 	// gorilla web http router
 	router := mux.NewRouter()
 	// IndexPageHandler handles index page (i.e. login page)
@@ -163,7 +174,7 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 		if err != nil {
 
 			// Log on server side and notify client
-			log.Printf("Failed to create uuid for function call. Error: %s", err)
+			log.Println("Failed to create uuid for function call.")
 
 			// Return immediately when there is an error
 			return StatusError{http.StatusInternalServerError, err}
@@ -172,12 +183,12 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 		uuidStr := uuid.String() // uuidStr needed when fetching log
 
 		jobname := functionName + "-" + uuidStr
-		image := defaultDockerRegistry + "/" + userName + "/" + functionName
+		image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
 		labels := make(map[string]string)
 
 		if err = a.k.CallFunction(jobname, image, userName, labels); err != nil {
 
-			log.Printf("Failed to call function %s. Error: %s", functionName, err)
+			log.Printf("Failed to call function %s.", functionName)
 
 			return StatusError{http.StatusInternalServerError, err}
 		}
@@ -215,7 +226,6 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		// check if the input code is empty.
 		if functionName == "" || runtime == "" || code == "" {
 			err := errors.New("Something's wrong with FunctionName/Runtime/Code.")
-			log.Printf("Function failed: something's wrong with Function Name/Runtime/Code.")
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
@@ -227,26 +237,24 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		exeFile, err := os.Create(exeFileName)
 
 		if err != nil {
-			log.Printf("Function failed: %s", err)
 			return StatusError{http.StatusInternalServerError, err}
 		}
 		defer exeFile.Close()
 
 		// Write the function into the execution file
 		if _, err = exeFile.WriteString(code); err != nil {
-			log.Printf("Function failed: %s", err)
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
 		// Build funtion
-		if err = a.d.BuildFunction(defaultDockerRegistry, userName, functionName, runtime); err != nil {
-			log.Printf("Build function failed: %s", err)
+		if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime); err != nil {
+			log.Println("Build function failed")
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
 		// Register function to configured docker registry
-		if err = docker.RegisterFunction(defaultDockerRegistry, userName, functionName); err != nil {
-			log.Printf("Register function failed: %s", err)
+		if err = docker.RegisterFunction(a.conf.DockerRegistry, userName, functionName); err != nil {
+			log.Println("Register function failed")
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
@@ -274,7 +282,7 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 	redirectTarget := "/"
 	if name != "" && pass != "" {
 		// ... check credentials
-		ok, err := checkCredentials(name, pass)
+		ok, err := checkCredentials(a, name, pass)
 		if !ok {
 			errMsg := err.Error()
 			// Check if it is a LDAP specific error
@@ -353,14 +361,14 @@ func getUserName(a *appContext, request *http.Request) (userName string) {
 	return userName
 }
 
-func checkCredentials(name string, pass string) (bool, error) {
+func checkCredentials(a *appContext, name string, pass string) (bool, error) {
 	var l *ldap.Conn
 	var err error
 
-	servers := []string{"ds.symcpe.net"}
-	port := 636
-	retries := 3
-	username := fmt.Sprintf("uid=%s,ou=People,dc=mgmt,dc=symcpe,dc=net", name)
+	servers := a.conf.LDAPcfg.LDAPServer
+	port := a.conf.LDAPcfg.LDAPPort
+	retries := a.conf.LDAPcfg.LDAPRetries
+	username := fmt.Sprintf(a.conf.LDAPcfg.LDAPBaseDn, name)
 
 	log.Println("Authenticating user", name)
 
