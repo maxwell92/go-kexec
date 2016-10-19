@@ -1,42 +1,14 @@
-package main
+package dal
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
-
-type Group struct {
-	ID      string
-	Name    string
-	Created time.Time
-	Users   []User
-}
-
-type User struct {
-	ID      string
-	Name    string
-	Created time.Time
-}
-
-type Function struct {
-	ID            string
-	UserID        string
-	Content       string
-	Created       time.Time
-	Updated       time.Time
-	LastExecution time.Time
-}
-
-type FunctionExecution struct {
-	ID         string
-	FunctionID string
-	Log        string
-	Timestamp  time.Time
-}
 
 type DalConfig struct {
 	// data source
@@ -54,36 +26,15 @@ type DalConfig struct {
 }
 
 func (c *DalConfig) getDataSourceName() string {
-	//	return fmt.Sprintf("%s:%s@tcp(%s:3306)/%s", c.username, c.password, c.dbhost, c.dbname)
 	return fmt.Sprintf("%s:%s@tcp(%s:3306)/", c.username, c.password, c.dbhost)
 }
 
 type MySQL struct {
 	*sql.DB
-}
 
-func main() {
-	config := &DalConfig{
-		dbhost:   "100.73.145.91",
-		username: "kexec",
-		password: "password",
-
-		dbname: "kexec",
-
-		usersTable:      "users",
-		functionsTable:  "functions",
-		executionsTable: "executions",
-	}
-
-	dal, err := NewMySQL(config)
-
-	if err != nil {
-		panic(err)
-	}
-
-	if err = dal.Ping(); err != nil {
-		panic(err)
-	}
+	usersTable      string
+	functionsTable  string
+	executionsTable string
 }
 
 func NewMySQL(config *DalConfig) (*MySQL, error) {
@@ -102,6 +53,7 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		return nil, err
 	}
 
+	// Create the users table if not already existed
 	_, err = db.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s ( 
 		u_id INT NOT NULL AUTO_INCREMENT, 
@@ -114,10 +66,19 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		return nil, err
 	}
 
+	// Create a unique index on (name) column of users table
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.usersTable))
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the functions table if not already existed
 	_, err = db.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s ( 
 		f_id INT NOT NULL AUTO_INCREMENT, 
-		u_id INT NOT NULL, 
+		u_id INT NOT NULL,
+		name VARCHAR(255) NOT NULL,
 		content TEXT, 
 		created TIMESTAMP, 
 		updated TIMESTAMP, 
@@ -129,10 +90,12 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		return nil, err
 	}
 
+	// Create the executions table if not already existed
 	_, err = db.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
 		e_id INT NOT NULL AUTO_INCREMENT, 
-		f_id INT NOT NULL, 
+		f_id INT NOT NULL,
+		uuid VARCHAR(255) NOT NULL,
 		log TEXT, 
 		created TIMESTAMP, 
 		PRIMARY KEY (e_id), 
@@ -143,7 +106,12 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		return nil, err
 	}
 
-	return &MySQL{db}, nil
+	return &MySQL{
+		db,
+		config.usersTable,
+		config.functionsTable,
+		config.executionsTable,
+	}, nil
 }
 
 // List all groups inside an org
@@ -166,14 +134,80 @@ func (dal *MySQL) PutGroup(groupName string) error {
 	return errors.New("Not implemented yet.")
 }
 
-// Put user if the user is not yet created
-func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) error {
-	return errors.New("Not implemented yet.")
+// PutUserIfNotExists inserts user into DB if the user
+// is not already inserted. The caller is responsible for
+// making sure `userName` is not empty.
+func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64, error) {
+	stmt, err := dal.Prepare(fmt.Sprintf(
+		"INSERT IGNORE INTO %s (name, created) VALUES (?, ?)",
+		dal.usersTable))
+
+	if err != nil {
+		return -1, -1, err
+	}
+
+	res, err := stmt.Exec(userName, time.Now().Format(time.RFC3339))
+	if err != nil {
+		return -1, -1, err
+	}
+
+	lastId, err := res.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	rowCnt, err := res.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	return lastId, rowCnt, nil
 }
 
-// Put function if the function is not yet created
-func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName string) error {
-	return errors.New("Not implemented yet.")
+// PutFunctionIfNotExisted inserts function into DB if the function
+// is not already inserted.
+//
+// When both `userName` and `userId` are not empty, the function check
+// userId first.
+func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string, userId int64) (int64, int64, error) {
+
+	uid := userId
+
+	if uid < 0 && userName == "" {
+		return -1, -1, errors.New("Either userName or userId should be valid")
+	}
+
+	if uid < 0 {
+		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.usersTable), userName).Scan(&uid)
+		if err != nil {
+			return -1, -1, err
+		}
+	}
+
+	stmt, err := dal.Prepare(fmt.Sprintf(
+		"INSERT INTO %s (u_id, name, content, created) VALUES (?, ?, ?, ?)",
+		dal.functionsTable))
+
+	if err != nil {
+		return -1, -1, err
+	}
+
+	res, err := stmt.Exec(uid, funcName, funcContent, time.Now().Format(time.RFC3339))
+	if err != nil {
+		return -1, -1, err
+	}
+
+	lastId, err := res.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	rowCnt, err := res.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	return lastId, rowCnt, nil
 }
 
 // Overwrite function even if it was created already

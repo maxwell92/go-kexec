@@ -9,3 +9,4 @@ Function-as-a-Service (FaaS) based on Kubernetes Jobs
 5. Reverse proxy configuration
 6. Integration test
 7. Add web frontend using advanced web framework (eg AngularJS)
+8. Tune DAL (mysql)
