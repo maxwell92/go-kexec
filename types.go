@@ -1,10 +1,12 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/gorilla/securecookie"
+	"github.com/xuant/go-kexec/dal"
 	"github.com/xuant/go-kexec/docker"
 	"github.com/xuant/go-kexec/kexec"
-	"net/http"
 )
 
 // Error represents a handler error. It provides methods for a HTTP status
@@ -43,6 +45,7 @@ type ldapConfig struct {
 type appContext struct {
 	d             *docker.Docker
 	k             *kexec.Kexec
+	dal           dal.DAL
 	cookieHandler *securecookie.SecureCookie
 	conf          *appConfig
 }

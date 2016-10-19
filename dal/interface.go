@@ -1,24 +1,20 @@
 package dal
 
 type DAL interface {
-	// List all groups
-	ListGroups(groupName string) ([]Group, error)
+	// List functions created by a user
+	ListFunctionsOfUser(namespace, username string, userId int64) ([]*Function, error)
 
-	// List all users inside a group
-	ListUsersOfGroup(groupName string) ([]User, error)
+	// Insert user into DB if not existed.
+	//
+	// Returns: (int64) insert row id,
+	//          (int64) # of rows influenced,
+	//          (error) if there is one
+	PutUserIfNotExisted(groupName, userName string) (int64, int64, error)
 
-	// List all functions created by a user
-	ListFunctionsOfUser(namespace, username string) ([]Function, error)
-
-	// Put group
-	PutGroup(groupName string) error
-
-	// Put user
-	PutUser(groupName, userName string) error
-
-	// Put function
-	PutFunction(userName, funcName string) error
-
-	// Get function content
-	GetFunctionContent(userName, funcName string) (string, error)
+	// Insert function into DB if not existed.
+	//
+	// Returns: (int64) insert row id,
+	//          (int64) # of rows influenced,
+	//          (error) if there is one
+	PutFunctionIfNotExisted(userName, funcName, funcContent string, userId int64) (int64, int64, error)
 }
