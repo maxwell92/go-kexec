@@ -3,31 +3,30 @@ package dal
 import "time"
 
 type Group struct {
-	ID      string
+	ID      int64
 	Name    string
 	Created time.Time
 	Users   []User
 }
 
 type User struct {
-	ID      string
+	ID      int64
 	Name    string
 	Created time.Time
 }
 
 type Function struct {
-	ID            string
-	UserID        string
-	Name          string
-	Content       string
-	Created       time.Time
-	Updated       time.Time
-	LastExecution time.Time
+	ID      int64
+	UserID  int64
+	Name    string
+	Content string
+	Created time.Time
+	Updated time.Time
 }
 
 type FunctionExecution struct {
-	ID         string
-	FunctionID string
+	ID         int64
+	FunctionID int64
 	Log        string
 	Timestamp  time.Time
 }

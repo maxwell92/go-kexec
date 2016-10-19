@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -26,7 +25,7 @@ type DalConfig struct {
 }
 
 func (c *DalConfig) getDataSourceName() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:3306)/", c.username, c.password, c.dbhost)
+	return fmt.Sprintf("%s:%s@tcp(%s:3306)/?parseTime=true", c.username, c.password, c.dbhost)
 }
 
 type MySQL struct {
@@ -125,8 +124,62 @@ func (dal *MySQL) ListUsersOfGroup(groupName string) ([]User, error) {
 }
 
 // List all functions created by a user
-func (dal *MySQL) ListFunctionsOfUser(namespace, username string) ([]Function, error) {
-	return nil, errors.New("Not implemented yet.")
+func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) ([]*Function, error) {
+
+	uid := userId
+
+	if uid < 0 && username == "" {
+		return nil, errors.New("Either userName or userId should be valid")
+	}
+
+	if uid < 0 {
+		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.usersTable), username).Scan(&uid)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	funcList := make([]*Function, 0, 5)
+
+	stmt, err := dal.Prepare(fmt.Sprintf(
+		"SELECT f_id, name, content, created FROM %s WHERE u_id = ?",
+		dal.functionsTable))
+	if err != nil {
+		fmt.Println(err)
+		return funcList, err
+	}
+	defer stmt.Close()
+
+	fmt.Printf("stmt: %s\n", stmt)
+	rows, err := stmt.Query(uid)
+	if err != nil {
+		return funcList, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		function := &Function{
+			ID:      -1,
+			UserID:  uid,
+			Name:    "",
+			Content: "",
+			Created: time.Time{},
+			Updated: time.Time{},
+		}
+
+		err := rows.Scan(&function.ID, &function.Name, &function.Content, &function.Created)
+		if err != nil {
+			return funcList, err
+		}
+
+		funcList = append(funcList, function)
+	}
+
+	if err = rows.Err(); err != nil {
+		return funcList, err
+	}
+
+	return funcList, nil
 }
 
 // Put group
@@ -145,6 +198,7 @@ func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64,
 	if err != nil {
 		return -1, -1, err
 	}
+	defer stmt.Close()
 
 	res, err := stmt.Exec(userName, time.Now().Format(time.RFC3339))
 	if err != nil {
@@ -164,7 +218,6 @@ func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64,
 	return lastId, rowCnt, nil
 }
 
-// PutFunctionIfNotExisted inserts function into DB if the function
 // is not already inserted.
 //
 // When both `userName` and `userId` are not empty, the function check
@@ -222,4 +275,22 @@ func (dal *MySQL) RecordFunctionExecution(userName, funcName, uuid string) error
 // Get function content
 func (dal *MySQL) GetFunctionContent(userName, funcName string) (string, error) {
 	return "", errors.New("Not implemented yet.")
+}
+
+// Careful with this function, it drops your entire database.
+// Only used for test purpose.
+func (dal *MySQL) ClearDatabase() error {
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.executionsTable)); err != nil {
+		return err
+	}
+
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.functionsTable)); err != nil {
+		return err
+	}
+
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.usersTable)); err != nil {
+		return err
+	}
+
+	return nil
 }

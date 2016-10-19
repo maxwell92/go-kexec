@@ -1,9 +1,18 @@
 package dal
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"testing"
+	"time"
 )
+
+var funcContentTemp = `
+def foo():
+	print("Testing DAL (#%d).")
+foo()
+`
 
 func TestMain(m *testing.M) {
 
@@ -12,7 +21,7 @@ func TestMain(m *testing.M) {
 		username: "kexec",
 		password: "password",
 
-		dbname: "kexec",
+		dbname: "kexectest",
 
 		usersTable:      "users",
 		functionsTable:  "functions",
@@ -29,27 +38,52 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	// Clear DB before test
+	if err = dal.ClearDatabase(); err != nil {
+		panic(err)
+	}
+
 	testUsername := "TestUser"
-	testFuncname := "TestFunc"
-	testFuncContent := `
-	def foo():
-		print("Hello world.")
-	foo()
-	`
 
 	log.Printf("Inserting user...")
 	lastId, rowCount, err := dal.PutUserIfNotExisted("", testUsername)
+	userId := lastId
 	if err != nil {
 		panic(err)
 	}
-
 	log.Printf("Last ID: %d, Rows affected: %d", lastId, rowCount)
 
-	log.Printf("Inserting function...")
-	lastId, rowCount, err = dal.PutFunctionIfNotExisted(testUsername, testFuncname, testFuncContent, -1)
+	funcList := make([]*Function, 0, 5)
+	for i := 0; i < 3; i++ {
+		function := &Function{
+			ID:      -1,
+			UserID:  userId,
+			Name:    fmt.Sprintf("TestFunction%d", i+1),
+			Content: fmt.Sprintf(funcContentTemp, i+1),
+			Created: time.Now(),
+		}
+		funcList = append(funcList, function)
+	}
+
+	for _, function := range funcList {
+		log.Printf("Inserting function %s...", function.Name)
+		lastId, rowCount, err = dal.PutFunctionIfNotExisted("", function.Name, function.Content, function.UserID)
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("Last ID: %d, Rows affected: %d", lastId, rowCount)
+	}
+
+	functions, err := dal.ListFunctionsOfUser("default", testUsername, -1)
 	if err != nil {
 		panic(err)
 	}
+	if len(functions) != len(funcList) {
+		panic(errors.New("Size of function list is not right."))
+	}
 
-	log.Printf("Last ID: %d, Rows affected: %d", lastId, rowCount)
+	// Clear DB after test
+	if err = dal.ClearDatabase(); err != nil {
+		panic(err)
+	}
 }
