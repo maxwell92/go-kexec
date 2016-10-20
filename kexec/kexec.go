@@ -28,7 +28,7 @@ type Kexec struct {
 }
 
 // NewKexec creates a new Kexec instance which contains all the methods
-// to manipulate the specified kubernetes/openshift cluster.
+// to communicate with the kubernetes/openshift cluster.
 //
 // Some of the main methods:
 // 1. Call a function

@@ -179,9 +179,11 @@ foo()</div>
       </div>
 
       <div id="Pineapple" class="tabcontent">
-        <h3>Pineapple</h3>
         <p>%s</p>
+	<p>%s</p>
+	<p>%s</p>
       </div>
+
       <div id="logout">
         <a href="/logout">Log Out</a>
       </div>

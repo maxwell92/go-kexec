@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
 	"github.com/wayn3h0/go-uuid"
+	"github.com/xuant/go-kexec/dal"
 	"github.com/xuant/go-kexec/docker"
 	"github.com/xuant/go-kexec/html"
 	"github.com/xuant/go-kexec/kexec"
@@ -59,6 +60,7 @@ type ldapConfig struct {
 type appContext struct {
 	d             *docker.Docker
 	k             *kexec.Kexec
+	dal           dal.DAL
 	cookieHandler *securecookie.SecureCookie
 	conf          *appConfig
 }
@@ -107,11 +109,34 @@ func main() {
 
 	// kubernetes handler for calling function and pulling function
 	// execution logs
-	k, _ := kexec.NewKexec(&kexec.KexecConfig{
+	k, err := kexec.NewKexec(&kexec.KexecConfig{
 		KubeConfig: os.Getenv("HOME") + "/.kube/config",
 	})
 
-	context := &appContext{d: d, k: k, cookieHandler: cookieHandler, conf: nil}
+	if err != nil {
+		panic(err)
+	}
+
+	// data access layer. Default MySQL
+	//
+	// TODO: dal should be pluggable
+	dal, err := dal.NewMySQL(&dal.DalConfig{
+		DBHost:   "100.73.145.91",
+		Username: "kexec",
+		Password: "password",
+
+		DBName: "kexec",
+
+		UsersTable:      "users",
+		FunctionsTable:  "functions",
+		ExecutionsTable: "executions",
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	context := &appContext{d: d, k: k, dal: dal, cookieHandler: cookieHandler, conf: nil}
 	// gorilla web http router
 	router := mux.NewRouter()
 	// IndexPageHandler handles index page (i.e. login page)
@@ -250,6 +275,12 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
+		// Put function into db
+		if err = putUserFunction(a, userName, functionName, code, -1); err != nil {
+			log.Printf("Failed to put function into DB: %s", err)
+			return StatusError{http.StatusInternalServerError, err}
+		}
+
 		// If all the above operation succeeded, the function is created
 		// successfully.
 		fmt.Fprintf(response, html.FunctionCreatedPage)
@@ -295,6 +326,20 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 				"</form>", errMsg)
 			return nil
 		}
+
+		// Put authenticated user into DB
+		insertId, rowCnt, err := putUserIfNotExistedInDB(a, "", name)
+		if err != nil {
+			http.Redirect(response, request, redirectTarget, http.StatusFound)
+			return err
+		}
+
+		if rowCnt > 0 {
+			log.Printf("Successfully put user into DB, uid = %d", insertId)
+		} else {
+			log.Printf("User %s already in DB.", name)
+		}
+
 		setSession(a, name, response)
 		redirectTarget = "/internal"
 	}
@@ -303,9 +348,24 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 }
 
 func InternalPageHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
+	namespace := "default"
 	userName := getUserName(a, request)
 	if userName != "" {
-		fmt.Fprintf(response, html.InternalPage, userName)
+		functions, err := getUserFunctions(a, namespace, userName, -1)
+		if err != nil {
+			fmt.Fprintf(response, html.InternalPage, userName, err)
+			return err
+		}
+
+		// Functions to be listed. (Only 3 of them if there are more than 3 functions)
+		funcToBeListed := make([]string, 3)
+		for i := 0; i < 3; i++ {
+			if i < len(functions) {
+				funcToBeListed[i] = functions[i].Name
+			}
+		}
+
+		fmt.Fprintf(response, html.InternalPage, userName, funcToBeListed[0], funcToBeListed[1], funcToBeListed[2])
 	} else {
 		http.Redirect(response, request, "/", http.StatusFound)
 	}
@@ -351,6 +411,19 @@ func getUserName(a *appContext, request *http.Request) (userName string) {
 		}
 	}
 	return userName
+}
+
+func putUserIfNotExistedInDB(a *appContext, groupName, userName string) (int64, int64, error) {
+	return a.dal.PutUserIfNotExisted(groupName, userName)
+}
+
+func getUserFunctions(a *appContext, namespace, username string, userId int64) ([]*dal.Function, error) {
+	return a.dal.ListFunctionsOfUser(namespace, username, userId)
+}
+
+func putUserFunction(a *appContext, username, funcName, funcContent string, userId int64) error {
+	_, _, err := a.dal.PutFunctionIfNotExisted(username, funcName, funcContent, -1)
+	return err
 }
 
 func checkCredentials(name string, pass string) (bool, error) {

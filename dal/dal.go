@@ -11,29 +11,29 @@ import (
 
 type DalConfig struct {
 	// data source
-	dbhost   string
-	username string
-	password string
+	DBHost   string
+	Username string
+	Password string
 
 	// db
-	dbname string
+	DBName string
 
 	// tables
-	usersTable      string
-	functionsTable  string
-	executionsTable string
+	UsersTable      string
+	FunctionsTable  string
+	ExecutionsTable string
 }
 
 func (c *DalConfig) getDataSourceName() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:3306)/?parseTime=true", c.username, c.password, c.dbhost)
+	return fmt.Sprintf("%s:%s@tcp(%s:3306)/?parseTime=true", c.Username, c.Password, c.DBHost)
 }
 
 type MySQL struct {
 	*sql.DB
 
-	usersTable      string
-	functionsTable  string
-	executionsTable string
+	UsersTable      string
+	FunctionsTable  string
+	ExecutionsTable string
 }
 
 func NewMySQL(config *DalConfig) (*MySQL, error) {
@@ -42,12 +42,12 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		return nil, err
 	}
 
-	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", config.dbname))
+	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", config.DBName))
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = db.Exec("USE " + config.dbname)
+	_, err = db.Exec("USE " + config.DBName)
 	if err != nil {
 		return nil, err
 	}
@@ -59,14 +59,14 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		name VARCHAR(255) NOT NULL, 
 		created TIMESTAMP, 
 		PRIMARY KEY (u_id)
-	)`, config.usersTable))
+	)`, config.UsersTable))
 
 	if err != nil {
 		return nil, err
 	}
 
 	// Create a unique index on (name) column of users table
-	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.usersTable))
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.UsersTable))
 
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		updated TIMESTAMP, 
 		PRIMARY KEY (f_id), 
 		FOREIGN KEY (u_id) REFERENCES %s(u_id)
-	)`, config.functionsTable, config.usersTable))
+	)`, config.FunctionsTable, config.UsersTable))
 
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		created TIMESTAMP, 
 		PRIMARY KEY (e_id), 
 		FOREIGN KEY (f_id) REFERENCES %s(f_id)
-	)`, config.executionsTable, config.functionsTable))
+	)`, config.ExecutionsTable, config.FunctionsTable))
 
 	if err != nil {
 		return nil, err
@@ -107,20 +107,10 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 
 	return &MySQL{
 		db,
-		config.usersTable,
-		config.functionsTable,
-		config.executionsTable,
+		config.UsersTable,
+		config.FunctionsTable,
+		config.ExecutionsTable,
 	}, nil
-}
-
-// List all groups inside an org
-func (dal *MySQL) ListGroups(groupName string) ([]Group, error) {
-	return nil, errors.New("Not implemented yet.")
-}
-
-// List all users inside a group
-func (dal *MySQL) ListUsersOfGroup(groupName string) ([]User, error) {
-	return nil, errors.New("Not implemented yet.")
 }
 
 // List all functions created by a user
@@ -133,7 +123,7 @@ func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) 
 	}
 
 	if uid < 0 {
-		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.usersTable), username).Scan(&uid)
+		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.UsersTable), username).Scan(&uid)
 		if err != nil {
 			return nil, err
 		}
@@ -143,14 +133,13 @@ func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) 
 
 	stmt, err := dal.Prepare(fmt.Sprintf(
 		"SELECT f_id, name, content, created FROM %s WHERE u_id = ?",
-		dal.functionsTable))
+		dal.FunctionsTable))
 	if err != nil {
 		fmt.Println(err)
 		return funcList, err
 	}
 	defer stmt.Close()
 
-	fmt.Printf("stmt: %s\n", stmt)
 	rows, err := stmt.Query(uid)
 	if err != nil {
 		return funcList, err
@@ -182,18 +171,13 @@ func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) 
 	return funcList, nil
 }
 
-// Put group
-func (dal *MySQL) PutGroup(groupName string) error {
-	return errors.New("Not implemented yet.")
-}
-
 // PutUserIfNotExists inserts user into DB if the user
 // is not already inserted. The caller is responsible for
 // making sure `userName` is not empty.
 func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64, error) {
 	stmt, err := dal.Prepare(fmt.Sprintf(
 		"INSERT IGNORE INTO %s (name, created) VALUES (?, ?)",
-		dal.usersTable))
+		dal.UsersTable))
 
 	if err != nil {
 		return -1, -1, err
@@ -231,7 +215,7 @@ func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string
 	}
 
 	if uid < 0 {
-		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.usersTable), userName).Scan(&uid)
+		err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.UsersTable), userName).Scan(&uid)
 		if err != nil {
 			return -1, -1, err
 		}
@@ -239,7 +223,7 @@ func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string
 
 	stmt, err := dal.Prepare(fmt.Sprintf(
 		"INSERT INTO %s (u_id, name, content, created) VALUES (?, ?, ?, ?)",
-		dal.functionsTable))
+		dal.FunctionsTable))
 
 	if err != nil {
 		return -1, -1, err
@@ -263,32 +247,18 @@ func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string
 	return lastId, rowCnt, nil
 }
 
-// Overwrite function even if it was created already
-func (dal *MySQL) PutFunction(userName, funcName string) error {
-	return errors.New("Not implemented yet.")
-}
-
-func (dal *MySQL) RecordFunctionExecution(userName, funcName, uuid string) error {
-	return errors.New("Not implemented yet.")
-}
-
-// Get function content
-func (dal *MySQL) GetFunctionContent(userName, funcName string) (string, error) {
-	return "", errors.New("Not implemented yet.")
-}
-
 // Careful with this function, it drops your entire database.
 // Only used for test purpose.
 func (dal *MySQL) ClearDatabase() error {
-	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.executionsTable)); err != nil {
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.ExecutionsTable)); err != nil {
 		return err
 	}
 
-	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.functionsTable)); err != nil {
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.FunctionsTable)); err != nil {
 		return err
 	}
 
-	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.usersTable)); err != nil {
+	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.UsersTable)); err != nil {
 		return err
 	}
 
