@@ -1,6 +1,17 @@
 # go-kexec
 Function-as-a-Service (FaaS) based on Kubernetes Jobs
 
+# How to build and run
+In go-exec directory, run
+```
+go install
+```
+
+Then, go to your bin, run
+```
+./go-kexec -config=<path to gorilla-config.json>
+```
+
 # Future work
 1. Handlers should be more concurrent (goroutine)
 2. Parallel execution for kexec
