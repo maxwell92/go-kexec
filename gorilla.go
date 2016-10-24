@@ -213,8 +213,25 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		log.Printf("Code uploaded:\n%s", code)
 		log.Printf("Start creating function \"%s\" with runtime \"%s\"", functionName, runtime)
 
+		// Create a time based uuid as part of the context directory name
+		uuid, err := uuid.NewTimeBased()
+
+		if err != nil {
+			log.Println("Failed to create uuid for function call.")
+			return StatusError{http.StatusInternalServerError, err}
+		}
+
+		uuidStr := uuid.String()
+		userCtx := userName + "-" + uuidStr
+
 		// Create the execution file for the function
-		exeFileName := filepath.Join(docker.IBContext, docker.ExecutionFile)
+		ctxDir := filepath.Join(docker.IBContext, userCtx)
+
+		if err := os.Mkdir(ctxDir, os.ModePerm); err != nil {
+			return StatusError{http.StatusInternalServerError, err}
+		}
+
+		exeFileName := filepath.Join(ctxDir, docker.ExecutionFile)
 		exeFile, err := os.Create(exeFileName)
 
 		if err != nil {
@@ -228,7 +245,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		}
 
 		// Build funtion
-		if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime); err != nil {
+		if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime, ctxDir); err != nil {
 			log.Println("Build function failed")
 			return StatusError{http.StatusInternalServerError, err}
 		}

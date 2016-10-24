@@ -49,18 +49,18 @@ func (d *Docker) initCli() (*client.Client, error) {
 	return client.NewClient(d.Host, d.Version, d.HttpClient, d.HttpHeaders)
 }
 
-func (d *Docker) BuildFunction(registry, namespace, funcName, templateName string) error {
-	if _, err := os.Stat(IBContext + ExecutionFile); err != nil {
+func (d *Docker) BuildFunction(registry, namespace, funcName, templateName, ctxDir string) error {
+	if _, err := os.Stat(filepath.Join(ctxDir, ExecutionFile)); err != nil {
 		log.Printf("Failed build function. Error: Execution file not found.")
 		return errors.New("Execution file not found.")
 	}
 
-	if err := setRuntimeTemplate(templateName); err != nil {
+	if err := setRuntimeTemplate(templateName, ctxDir); err != nil {
 		log.Printf("Failed to set up runtime template. Error:%s", err)
 		return err
 	}
 
-	f, err := os.Open(filepath.Join(IBContext, ".dockerignore"))
+	f, err := os.Open(filepath.Join(ctxDir, ".dockerignore"))
 
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -75,7 +75,7 @@ func (d *Docker) BuildFunction(registry, namespace, funcName, templateName strin
 		}
 	}
 
-	if err := builder.ValidateContextDirectory(IBContext, excludes); err != nil {
+	if err := builder.ValidateContextDirectory(ctxDir, excludes); err != nil {
 		return fmt.Errorf("Error checking context: '%s'.", err)
 	}
 
@@ -86,7 +86,7 @@ func (d *Docker) BuildFunction(registry, namespace, funcName, templateName strin
 		includes = append(includes, ".dockerignore", RelDockerfile)
 	}
 
-	buildCtx, err := archive.TarWithOptions(IBContext, &archive.TarOptions{
+	buildCtx, err := archive.TarWithOptions(ctxDir, &archive.TarOptions{
 		Compression:     archive.Uncompressed,
 		ExcludePatterns: excludes,
 		IncludeFiles:    includes,
@@ -141,14 +141,14 @@ ENTRYPOINT [ "python", "exec" ]
 // setRuntimeEnv creates the runtime environment for building a docker image.
 //
 // Based on the templateName, this method will create a corresponding Dockerfile
-// in IBContext (i.e. /tmp/faas-imagebuild-context). To make the build process fast,
+// in the context directory (i.e. /tmp/faas-imagebuild-context/xxxx). To make the build process fast,
 // runtime template should be proloaded onto the system.
 //
 // Now supporting Python27 only. Other template can be added easi
-func setRuntimeTemplate(templateName string) error {
+func setRuntimeTemplate(templateName, ctxDir string) error {
 	switch templateName {
 	case "python27":
-		ioutil.WriteFile(IBContext+"Dockerfile", []byte(python27Template), 0644)
+		ioutil.WriteFile(filepath.Join(ctxDir, RelDockerfile), []byte(python27Template), 0644)
 		return nil
 	default:
 		return errors.New("Runtime template " + templateName + " invalid or not supported yet.")
