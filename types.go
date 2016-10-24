@@ -49,7 +49,8 @@ type appContext struct {
 	cookieHandler *securecookie.SecureCookie
 	conf          *appConfig
 }
+type appRouteHandler func(*appContext, http.ResponseWriter, *http.Request) error
 type appHandler struct {
 	*appContext
-	H func(*appContext, http.ResponseWriter, *http.Request) error
+	H appRouteHandler
 }
