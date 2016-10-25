@@ -9,6 +9,7 @@ package kexec
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
@@ -111,6 +112,15 @@ func (k *Kexec) GetFunctionPods(funcName, uuidStr, namespace string) (*v1.PodLis
 	return k.getFunctionPods(funcName, uuidStr, namespace)
 }
 
+// public function to create a namespace if it does not exist
+func (k *Kexec) CreateUserNamespaceIfNotExist(namespace string) (*v1.Namespace, error) {
+	if ns, err := k.Clientset.Core().Namespaces().Get(namespace); err == nil {
+		log.Println("Namespace", namespace, "already exists!")
+		return ns, nil
+	}
+	return k.createNamespace(namespace)
+}
+
 // private function to help get the exact pod(s) that ran a specific
 // function execution.
 func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
@@ -128,6 +138,23 @@ func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodLis
 	}
 
 	return k.Clientset.Core().Pods(namespace).List(listOptions)
+}
+
+// private function to create a namespace
+func (k *Kexec) createNamespace(namespace string) (*v1.Namespace, error) {
+	labels := make(map[string]string)
+	labels["name"] = namespace
+	ns := &v1.Namespace{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:   namespace,
+			Labels: labels,
+		},
+	}
+	return k.Clientset.Core().Namespaces().Create(ns)
 }
 
 // createJobTemplate create a Job template, which will be used to

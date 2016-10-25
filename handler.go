@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/wayn3h0/go-uuid"
 	"github.com/xuant/go-kexec/dal"
 	"github.com/xuant/go-kexec/docker"
@@ -67,6 +70,8 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 		} else {
 			log.Printf("User %s already in DB.", name)
 		}
+
+		// Create a namespace if non-exist
 
 		setSession(a, name, response)
 		redirectTarget = "/internal"
@@ -193,8 +198,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 	return nil
 }
 
-func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
-
+func CallHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	userName := getUserName(a, request)
 	functionName := getFunctionName(request)
 
@@ -204,37 +208,65 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 		http.Redirect(response, request, "/", http.StatusFound)
 
 	} else {
-
-		// create a uuid for each function call. This uuid can be
-		// seen as the execution id for the function (notice there
-		// are multiple executions for a single function)
-		uuid, err := uuid.NewTimeBased()
-
-		if err != nil {
-
-			// Log on server side and notify client
-			log.Println("Failed to create uuid for function call.")
-
-			// Return immediately when there is an error
-			return StatusError{http.StatusInternalServerError, err}
-		}
-
-		uuidStr := uuid.String() // uuidStr needed when fetching log
-
-		jobname := functionName + "-" + uuidStr
-		image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
-		labels := make(map[string]string)
-
-		if err = a.k.CallFunction(jobname, image, userName, labels); err != nil {
-
-			log.Printf("Failed to call function %s.", functionName)
-
+		if _, _, err := callFunction(a, userName, functionName); err != nil {
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
 		fmt.Fprintf(response, html.FunctionCalledPage)
 	}
 	return nil
+}
+
+func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
+	vars := mux.Vars(request)
+	userName := vars["username"]
+	functionName := vars["function"]
+
+	uuidStr, nsName, err := callFunction(a, userName, functionName)
+	if err != nil {
+		return StatusError{http.StatusInternalServerError, err}
+	}
+	// Wait for job to complete
+	// TODO: check for job completion instead of wait 30s.
+	time.Sleep(30 * time.Second)
+
+	funcLog, err := a.k.GetFunctionLog(functionName, uuidStr, nsName)
+	if err != nil {
+		return StatusError{http.StatusInternalServerError, err}
+	}
+	log.Printf("Function Log:\n %s", string(funcLog))
+	return nil
+}
+
+func callFunction(a *appContext, userName, functionName string) (string, string, error) {
+	// create a uuid for each function call. This uuid can be
+	// seen as the execution id for the function (notice there
+	// are multiple executions for a single function)
+	uuid, err := uuid.NewTimeBased()
+
+	if err != nil {
+		log.Println("Failed to create uuid for function call.")
+		return "", "", err
+	}
+
+	uuidStr := uuid.String() // uuidStr needed when fetching log
+
+	// Create a namespace for the user and run the job
+	// in that namespace
+	nsName := strings.Replace(userName, "_", "-", -1) + "-serverless"
+	if _, err := a.k.CreateUserNamespaceIfNotExist(nsName); err != nil {
+		log.Println("Failed to get/create user namespace", nsName)
+		return "", "", err
+	}
+	jobname := functionName + "-" + uuidStr
+	image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
+	labels := make(map[string]string)
+
+	if err = a.k.CallFunction(jobname, image, nsName, labels); err != nil {
+		log.Println("Failed to call function", functionName)
+		return "", "", err
+	}
+	return uuidStr, nsName, nil
 }
 
 func setSession(a *appContext, userName string, response http.ResponseWriter) {
