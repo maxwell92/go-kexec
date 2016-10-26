@@ -20,6 +20,10 @@ import (
 	"k8s.io/client-go/1.4/tools/clientcmd"
 )
 
+var (
+	JobEnvParams = "SERVERLESS_PARAMS"
+)
+
 type KexecConfig struct {
 	KubeConfig string
 }
@@ -52,7 +56,7 @@ func NewKexec(c *KexecConfig) (*Kexec, error) {
 
 // CallFunction will create a Job template and then create the Job
 // instance against the specified kubernetes/openshift cluster.
-func (k *Kexec) CallFunction(jobname, image, namespace string, labels map[string]string) error {
+func (k *Kexec) CallFunction(jobname, image, params, namespace string, labels map[string]string) error {
 	/*
 		uuid, err := uuid.NewTimeBased()
 		if err != nil {
@@ -61,7 +65,7 @@ func (k *Kexec) CallFunction(jobname, image, namespace string, labels map[string
 		jobname := function + "-" + uuid.String()
 		fmt.Println(jobname)
 	*/
-	template := createJobTemplate(image, jobname, namespace, labels)
+	template := createJobTemplate(image, jobname, params, namespace, labels)
 
 	_, err := k.Clientset.Batch().Jobs(namespace).Create(template)
 	if err != nil {
@@ -165,7 +169,7 @@ func (k *Kexec) createNamespace(namespace string) (*v1.Namespace, error) {
 // Other features like parallelism, etc., cannot be specified.
 //
 // TODO: 1. make parallelism configurable
-func createJobTemplate(image, jobname, namespace string, labels map[string]string) *batchv1.Job {
+func createJobTemplate(image, jobname, params, namespace string, labels map[string]string) *batchv1.Job {
 	return &batchv1.Job{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       "Job",
@@ -186,6 +190,12 @@ func createJobTemplate(image, jobname, namespace string, labels map[string]strin
 						v1.Container{
 							Name:  jobname,
 							Image: image,
+							Env: []v1.EnvVar{
+								v1.EnvVar{
+									Name:  JobEnvParams,
+									Value: params,
+								},
+							},
 						},
 					},
 					RestartPolicy: v1.RestartPolicyNever,

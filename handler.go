@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -137,7 +138,8 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
-		log.Printf("Code uploaded:\n%s", code)
+		newCode := formatCode(code, functionName)
+		log.Printf("Code uploaded:\n%s", newCode)
 		log.Printf("Start creating function \"%s\" with runtime \"%s\"", functionName, runtime)
 
 		// Create a time based uuid as part of the context directory name
@@ -167,7 +169,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		defer exeFile.Close()
 
 		// Write the function into the execution file
-		if _, err = exeFile.WriteString(code); err != nil {
+		if _, err = exeFile.WriteString(newCode); err != nil {
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
@@ -184,7 +186,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		}
 
 		// Put function into db
-		if err = putUserFunction(a, userName, functionName, code, -1); err != nil {
+		if err = putUserFunction(a, userName, functionName, newCode, -1); err != nil {
 			log.Println("Failed to put function into DB")
 			return StatusError{http.StatusInternalServerError, err}
 		}
@@ -199,6 +201,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 func CallHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	userName := getUserName(a, request)
 	functionName := getFunctionName(request)
+	params := request.FormValue("params")
 
 	if userName == "" || functionName == "" {
 
@@ -206,7 +209,7 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 		http.Redirect(response, request, "/", http.StatusFound)
 
 	} else {
-		if _, _, err := callFunction(a, userName, functionName); err != nil {
+		if _, _, err := callFunction(a, userName, functionName, params); err != nil {
 			return StatusError{http.StatusInternalServerError, err}
 		}
 
@@ -220,7 +223,15 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	userName := vars["username"]
 	functionName := vars["function"]
 
-	uuidStr, nsName, err := callFunction(a, userName, functionName)
+	// Get function parameters from request body
+	params, err := ioutil.ReadAll(request.Body)
+	if err != nil {
+		return StatusError{http.StatusInternalServerError, err}
+	}
+	paramsStr := string(params)
+	log.Println("Calling function", functionName, "with parameters", paramsStr)
+
+	uuidStr, nsName, err := callFunction(a, userName, functionName, paramsStr)
 	if err != nil {
 		return StatusError{http.StatusInternalServerError, err}
 	}
@@ -233,10 +244,13 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 		return StatusError{http.StatusInternalServerError, err}
 	}
 	log.Printf("Function Log:\n %s", string(funcLog))
+
+	// Write to response
+	fmt.Fprintf(response, string(funcLog))
 	return nil
 }
 
-func callFunction(a *appContext, userName, functionName string) (string, string, error) {
+func callFunction(a *appContext, userName, functionName, params string) (string, string, error) {
 	// create a uuid for each function call. This uuid can be
 	// seen as the execution id for the function (notice there
 	// are multiple executions for a single function)
@@ -260,7 +274,7 @@ func callFunction(a *appContext, userName, functionName string) (string, string,
 	image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
 	labels := make(map[string]string)
 
-	if err = a.k.CallFunction(jobname, image, nsName, labels); err != nil {
+	if err = a.k.CallFunction(jobname, image, params, nsName, labels); err != nil {
 		log.Println("Failed to call function", functionName)
 		return "", "", err
 	}
@@ -359,4 +373,12 @@ func checkCredentials(a *appContext, name string, pass string) (bool, error) {
 	}
 	log.Printf("Bound user %s\n", name)
 	return true, nil
+}
+
+// Add imports and the remaining code
+func formatCode(code, functionName string) string {
+	return fmt.Sprintf("import json\nimport os\n\n"+
+		"%s\n\n"+
+		"params = os.environ[\"SERVERLESS_PARAMS\"]\n"+
+		"%s(json.loads(params))\n", code, functionName)
 }

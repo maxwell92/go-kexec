@@ -87,7 +87,7 @@ var routes = Routes{
 	},
 	Route{
 		"Call",
-		"GET",
+		"POST",
 		"/call/{username}/{function}",
 		CallFunctionHandler,
 	},
