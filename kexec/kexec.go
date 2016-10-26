@@ -7,9 +7,11 @@ that can be found in the LICENSE file.
 package kexec
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"time"
 
 	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/pkg/api"
@@ -56,7 +58,7 @@ func NewKexec(c *KexecConfig) (*Kexec, error) {
 
 // CallFunction will create a Job template and then create the Job
 // instance against the specified kubernetes/openshift cluster.
-func (k *Kexec) CallFunction(jobname, image, params, namespace string, labels map[string]string) error {
+func (k *Kexec) CreateFunctionJob(jobname, image, params, namespace string, labels map[string]string) error {
 	/*
 		uuid, err := uuid.NewTimeBased()
 		if err != nil {
@@ -82,22 +84,22 @@ func (k *Kexec) CallFunction(jobname, image, params, namespace string, labels ma
 //
 // TODO: Logs should be return in full if there are multiple pods
 //       for one function execution.
-func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, error) {
+func (k *Kexec) GetFunctionLog(jobName, namespace string) ([]byte, error) {
 
-	podlist, err := k.getFunctionPods(funcName, uuidStr, namespace)
+	podlist, err := k.getFunctionPods(jobName, namespace)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(podlist.Items) < 1 {
-		return nil, fmt.Errorf("No pod found for function %s - execution %s.", funcName, uuidStr)
+		return nil, fmt.Errorf("No pod found for job %s.", jobName)
 	}
 
 	// Only return the log of the first pod
 	podName := podlist.Items[0].Name
 	opts := &v1.PodLogOptions{
 		Follow:     true,
-		Timestamps: true,
+		Timestamps: false,
 	}
 
 	response, err := k.Clientset.Core().Pods(namespace).GetLogs(podName, opts).Stream()
@@ -112,8 +114,51 @@ func (k *Kexec) GetFunctionLog(funcName, uuidStr, namespace string) ([]byte, err
 }
 
 // public fuction to get pod(s) that ran a specific function execution.
-func (k *Kexec) GetFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
-	return k.getFunctionPods(funcName, uuidStr, namespace)
+func (k *Kexec) GetFunctionPods(jobName, namespace string) (*v1.PodList, error) {
+	return k.getFunctionPods(jobName, namespace)
+}
+
+func (k *Kexec) WaitForPodComplete(jobName, namespace string) error {
+	// Create job label selector
+	jobLabelSelector := labels.SelectorFromSet(labels.Set{
+		"job-name": jobName,
+	})
+
+	// List pods according to `jobLabelSelector`
+	listOptions := api.ListOptions{
+		Watch:         true,
+		LabelSelector: jobLabelSelector,
+	}
+
+	var status v1.PodStatus
+	w, err := k.Clientset.Core().Pods(namespace).Watch(listOptions)
+	if err != nil {
+		return err
+	}
+	func() {
+		for {
+			select {
+			case events, ok := <-w.ResultChan():
+				if !ok {
+					return
+				}
+				resp := events.Object.(*v1.Pod)
+				log.Println("Pod status:", resp.Status.Phase)
+				status = resp.Status
+				if resp.Status.Phase != v1.PodPending &&
+					resp.Status.Phase != v1.PodRunning {
+					w.Stop()
+				}
+				if resp.Status.Phase == v1.PodUnknown {
+					err = errors.New(resp.Status.Reason)
+				}
+			case <-time.After(60 * time.Second):
+				err = errors.New("Timeout to wait for job completes")
+				w.Stop()
+			}
+		}
+	}()
+	return err
 }
 
 // public function to create a namespace if it does not exist
@@ -127,13 +172,10 @@ func (k *Kexec) CreateUserNamespaceIfNotExist(namespace string) (*v1.Namespace, 
 
 // private function to help get the exact pod(s) that ran a specific
 // function execution.
-func (k *Kexec) getFunctionPods(funcName, uuidStr, namespace string) (*v1.PodList, error) {
-	// funcUUID is the label of the pod that ran the job
-	funcUUID := funcName + "-" + uuidStr
-
+func (k *Kexec) getFunctionPods(jobName, namespace string) (*v1.PodList, error) {
 	// Create job label selector
 	jobLabelSelector := labels.SelectorFromSet(labels.Set{
-		"job-name": funcUUID,
+		"job-name": jobName,
 	})
 
 	// List pods according to `jobLabelSelector`

@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/wayn3h0/go-uuid"
@@ -229,17 +228,24 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 		return StatusError{http.StatusInternalServerError, err}
 	}
 	paramsStr := string(params)
-	log.Println("Calling function", functionName, "with parameters", paramsStr)
+	if paramsStr == "" {
+		log.Println("Calling function", functionName)
+	} else {
+		log.Println("Calling function", functionName, "with parameters", paramsStr)
+	}
 
-	uuidStr, nsName, err := callFunction(a, userName, functionName, paramsStr)
+	// Call function. This will create a job in OpenShift
+	jobName, nsName, err := callFunction(a, userName, functionName, paramsStr)
 	if err != nil {
 		return StatusError{http.StatusInternalServerError, err}
 	}
-	// Wait for job to complete
-	// TODO: check for job completion instead of wait 30s.
-	time.Sleep(30 * time.Second)
 
-	funcLog, err := a.k.GetFunctionLog(functionName, uuidStr, nsName)
+	// Wait for job to complete
+	if err := a.k.WaitForPodComplete(jobName, nsName); err != nil {
+		return StatusError{http.StatusInternalServerError, err}
+	}
+
+	funcLog, err := a.k.GetFunctionLog(jobName, nsName)
 	if err != nil {
 		return StatusError{http.StatusInternalServerError, err}
 	}
@@ -270,15 +276,15 @@ func callFunction(a *appContext, userName, functionName, params string) (string,
 		log.Println("Failed to get/create user namespace", nsName)
 		return "", "", err
 	}
-	jobname := functionName + "-" + uuidStr
+	jobName := functionName + "-" + uuidStr
 	image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
 	labels := make(map[string]string)
 
-	if err = a.k.CallFunction(jobname, image, params, nsName, labels); err != nil {
+	if err = a.k.CreateFunctionJob(jobName, image, params, nsName, labels); err != nil {
 		log.Println("Failed to call function", functionName)
 		return "", "", err
 	}
-	return uuidStr, nsName, nil
+	return jobName, nsName, nil
 }
 
 func setSession(a *appContext, userName string, response http.ResponseWriter) {
