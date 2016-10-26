@@ -71,8 +71,6 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 			log.Printf("User %s already in DB.", name)
 		}
 
-		// Create a namespace if non-exist
-
 		setSession(a, name, response)
 		redirectTarget = "/internal"
 	}
