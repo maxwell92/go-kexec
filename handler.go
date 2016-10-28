@@ -19,6 +19,12 @@ import (
 	"gopkg.in/ldap.v2"
 )
 
+var (
+	MessageCreateFunctionFailed = "Failed to create function"
+
+	MessageCallFunctionFailed = "Failed to call function"
+)
+
 func IndexPageHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	userName := getUserName(a, request)
 	if userName != "" {
@@ -134,7 +140,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		// check if the input code is empty.
 		if functionName == "" || runtime == "" || code == "" {
 			err := errors.New("Something's wrong with FunctionName/Runtime/Code.")
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		newCode := formatCode(code, functionName)
@@ -146,7 +152,7 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 
 		if err != nil {
 			log.Println("Failed to create uuid for function call.")
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		uuidStr := uuid.String()
@@ -156,38 +162,38 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		ctxDir := filepath.Join(docker.IBContext, userCtx)
 
 		if err := os.Mkdir(ctxDir, os.ModePerm); err != nil {
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		exeFileName := filepath.Join(ctxDir, docker.ExecutionFile)
 		exeFile, err := os.Create(exeFileName)
 
 		if err != nil {
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 		defer exeFile.Close()
 
 		// Write the function into the execution file
 		if _, err = exeFile.WriteString(newCode); err != nil {
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		// Build funtion
 		if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime, ctxDir); err != nil {
 			log.Println("Build function failed")
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		// Register function to configured docker registry
 		if err = docker.RegisterFunction(a.conf.DockerRegistry, userName, functionName); err != nil {
 			log.Println("Register function failed")
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		// Put function into db
 		if err = putUserFunction(a, userName, functionName, newCode, -1); err != nil {
 			log.Println("Failed to put function into DB")
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
 		// If all the above operation succeeded, the function is created
@@ -209,7 +215,7 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 
 	} else {
 		if _, _, err := callFunction(a, userName, functionName, params); err != nil {
-			return StatusError{http.StatusInternalServerError, err}
+			return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 		}
 
 		fmt.Fprintf(response, html.FunctionCalledPage)
@@ -225,7 +231,7 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	// Get function parameters from request body
 	params, err := ioutil.ReadAll(request.Body)
 	if err != nil {
-		return StatusError{http.StatusInternalServerError, err}
+		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 	}
 	paramsStr := string(params)
 	if paramsStr == "" {
@@ -237,17 +243,17 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	// Call function. This will create a job in OpenShift
 	jobName, nsName, err := callFunction(a, userName, functionName, paramsStr)
 	if err != nil {
-		return StatusError{http.StatusInternalServerError, err}
+		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 	}
 
 	// Wait for job to complete
 	if err := a.k.WaitForPodComplete(jobName, nsName); err != nil {
-		return StatusError{http.StatusInternalServerError, err}
+		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 	}
 
 	funcLog, err := a.k.GetFunctionLog(jobName, nsName)
 	if err != nil {
-		return StatusError{http.StatusInternalServerError, err}
+		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 	}
 	log.Printf("Function Log:\n %s", string(funcLog))
 

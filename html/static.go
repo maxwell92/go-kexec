@@ -192,7 +192,7 @@ foo()</div>
 
   </div>
 
-<script src="http://d1n0x3qji82z53.cloudfront.net/src-min-noconflict/ace.js" type="text/javascript">
+<script src="src/ace.js" type="text/javascript">
 </script>
 <script type="text/javascript">
 

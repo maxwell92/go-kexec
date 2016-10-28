@@ -7,6 +7,8 @@ In go-exec directory, run
 go install
 ```
 
+Change FileServerDir in gorilla-config.json to your go-kexec/html directory
+
 Then, go to your bin, run
 ```
 ./go-kexec -config=<path to gorilla-config.json>

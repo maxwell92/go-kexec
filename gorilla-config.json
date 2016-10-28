@@ -1,4 +1,5 @@
 {
+	"FileServerDir": "/home/vagrant/goproject/src/github.com/xuant/go-kexec/html",
 	"DockerRegistry": "registry.paas.symcpe.com:443",
 	"LDAPcfg":
 	{

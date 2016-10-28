@@ -14,12 +14,14 @@ import (
 type Error interface {
 	error
 	Status() int
+	Message() string
 }
 
 // StatusError represents an error with an associated HTTP status code.
 type StatusError struct {
-	Code int
-	Err  error
+	Code    int
+	Err     error
+	UserMsg string
 }
 
 // Allows StatusError to satisfy the error interface.
@@ -32,7 +34,12 @@ func (se StatusError) Status() int {
 	return se.Code
 }
 
+func (se StatusError) Message() string {
+	return se.UserMsg
+}
+
 type appConfig struct {
+	FileServerDir  string
 	DockerRegistry string
 	LDAPcfg        ldapConfig
 }

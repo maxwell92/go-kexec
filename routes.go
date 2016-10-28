@@ -24,7 +24,7 @@ func (ah appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// We can retrieve the status here and write out a specific
 			// HTTP status code.
 			log.Printf("HTTP %d - %s", e.Status(), e)
-			http.Error(w, e.Error(), e.Status())
+			http.Error(w, e.Message(), e.Status())
 		default:
 			// Any error types we don't specifically look out for default
 			// to serving a HTTP 500
@@ -45,6 +45,7 @@ func NewRouter(context *appContext) *mux.Router {
 			Handler(appHandler{context, route.Handler})
 	}
 
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir(context.conf.FileServerDir)))
 	return router
 }
 
