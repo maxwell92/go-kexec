@@ -58,7 +58,8 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		u_id INT NOT NULL AUTO_INCREMENT, 
 		name VARCHAR(255) NOT NULL, 
 		created TIMESTAMP, 
-		PRIMARY KEY (u_id)
+		PRIMARY KEY (u_id),
+		UNIQUE(name)
 	)`, config.UsersTable))
 
 	if err != nil {
@@ -66,7 +67,8 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 	}
 
 	// Create a unique index on (name) column of users table
-	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.UsersTable))
+	// This method creates index everytime NewMySQL is called.
+	// _, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.UsersTable))
 
 	if err != nil {
 		return nil, err
