@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gorilla/securecookie"
 	"github.com/xuant/go-kexec/dal"
@@ -60,4 +61,32 @@ type appRouteHandler func(*appContext, http.ResponseWriter, *http.Request) error
 type appHandler struct {
 	*appContext
 	H appRouteHandler
+}
+
+type LoginPage struct {
+	LoginErr bool
+	ErrMsg   string
+}
+
+type FunctionRow struct {
+	FuncName    string
+	Owner       string
+	UpdatedTime time.Time
+}
+
+type DashboardPage struct {
+	Username  string
+	Functions []*FunctionRow
+}
+
+type CallResult struct {
+	Result string
+	Log    string
+}
+
+type ConfigFuncPage struct {
+	EnableFuncName bool
+	FuncName       string
+	FuncRuntime    string
+	FuncContent    string
 }

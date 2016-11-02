@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
+
+var MAX_NUM_FUNC = 100
 
 type DalConfig struct {
 	// data source
@@ -57,18 +60,10 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 	CREATE TABLE IF NOT EXISTS %s ( 
 		u_id INT NOT NULL AUTO_INCREMENT, 
 		name VARCHAR(255) NOT NULL, 
-		created TIMESTAMP, 
+		created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
 		PRIMARY KEY (u_id),
 		UNIQUE(name)
 	)`, config.UsersTable))
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a unique index on (name) column of users table
-	// This method creates index everytime NewMySQL is called.
-	// _, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD UNIQUE (name)", config.UsersTable))
 
 	if err != nil {
 		return nil, err
@@ -81,7 +76,6 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		u_id INT NOT NULL,
 		name VARCHAR(255) NOT NULL,
 		content TEXT, 
-		created TIMESTAMP, 
 		updated TIMESTAMP, 
 		PRIMARY KEY (f_id), 
 		FOREIGN KEY (u_id) REFERENCES %s(u_id)
@@ -98,7 +92,7 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 		f_id INT NOT NULL,
 		uuid VARCHAR(255) NOT NULL,
 		log TEXT, 
-		created TIMESTAMP, 
+		created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
 		PRIMARY KEY (e_id), 
 		FOREIGN KEY (f_id) REFERENCES %s(f_id)
 	)`, config.ExecutionsTable, config.FunctionsTable))
@@ -131,34 +125,31 @@ func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) 
 		}
 	}
 
-	funcList := make([]*Function, 0, 5)
-
 	stmt, err := dal.Prepare(fmt.Sprintf(
-		"SELECT f_id, name, content, created FROM %s WHERE u_id = ?",
+		"SELECT f_id, name, content, updated FROM %s WHERE u_id = ?",
 		dal.FunctionsTable))
 	if err != nil {
-		fmt.Println(err)
-		return funcList, err
+		return nil, err
 	}
 	defer stmt.Close()
 
 	rows, err := stmt.Query(uid)
 	if err != nil {
-		return funcList, err
+		return nil, err
 	}
 	defer rows.Close()
 
+	funcList := make([]*Function, 0, MAX_NUM_FUNC)
 	for rows.Next() {
 		function := &Function{
 			ID:      -1,
 			UserID:  uid,
 			Name:    "",
 			Content: "",
-			Created: time.Time{},
 			Updated: time.Time{},
 		}
 
-		err := rows.Scan(&function.ID, &function.Name, &function.Content, &function.Created)
+		err := rows.Scan(&function.ID, &function.Name, &function.Content, &function.Updated)
 		if err != nil {
 			return funcList, err
 		}
@@ -177,8 +168,9 @@ func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) 
 // is not already inserted. The caller is responsible for
 // making sure `userName` is not empty.
 func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64, error) {
+	log.Println("Adding user", userName, "to DB...")
 	stmt, err := dal.Prepare(fmt.Sprintf(
-		"INSERT IGNORE INTO %s (name, created) VALUES (?, ?)",
+		"INSERT IGNORE INTO %s (name) VALUES (?)",
 		dal.UsersTable))
 
 	if err != nil {
@@ -186,7 +178,7 @@ func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64,
 	}
 	defer stmt.Close()
 
-	res, err := stmt.Exec(userName, time.Now().Format(time.RFC3339))
+	res, err := stmt.Exec(userName)
 	if err != nil {
 		return -1, -1, err
 	}
@@ -204,12 +196,12 @@ func (dal *MySQL) PutUserIfNotExisted(groupName, userName string) (int64, int64,
 	return lastId, rowCnt, nil
 }
 
-// is not already inserted.
 //
 // When both `userName` and `userId` are not empty, the function check
 // userId first.
-func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string, userId int64) (int64, int64, error) {
-
+func (dal *MySQL) PutFunction(userName, funcName, funcContent string, userId int64) (int64, int64, error) {
+	var res sql.Result
+	var fid int
 	uid := userId
 
 	if uid < 0 && userName == "" {
@@ -223,19 +215,46 @@ func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string
 		}
 	}
 
-	stmt, err := dal.Prepare(fmt.Sprintf(
-		"INSERT INTO %s (u_id, name, content, created) VALUES (?, ?, ?, ?)",
-		dal.FunctionsTable))
+	// Check if the function exists
+	err := dal.QueryRow(fmt.Sprintf("SELECT f_id FROM %s WHERE name = ? AND u_id = ?", dal.FunctionsTable), funcName, uid).Scan(&fid)
+	// Not exist, insert a new one
+	if err == sql.ErrNoRows {
+		log.Println("Inserting function", funcName, "into DB...")
 
-	if err != nil {
+		stmt, err := dal.Prepare(fmt.Sprintf(
+			"INSERT INTO %s (u_id, name, content) VALUES (?, ?, ?)",
+			dal.FunctionsTable))
+
+		if err != nil {
+			return -1, -1, err
+		}
+		defer stmt.Close()
+
+		res, err = stmt.Exec(uid, funcName, funcContent)
+		if err != nil {
+			return -1, -1, err
+		}
+
+		log.Println("Inserted!")
+
+	} else if err != nil {
 		return -1, -1, err
+		// Already exist, update the function
+	} else {
+		log.Println("Updating function", funcName, "in DB...")
+		stmt, err := dal.Prepare(fmt.Sprintf(
+			"UPDATE %s SET content = ? WHERE f_id = ?",
+			dal.FunctionsTable))
+		if err != nil {
+			return -1, -1, err
+		}
+		defer stmt.Close()
+		res, err = stmt.Exec(funcContent, fid)
+		if err != nil {
+			return -1, -1, err
+		}
+		log.Println("Updated!")
 	}
-
-	res, err := stmt.Exec(uid, funcName, funcContent, time.Now().Format(time.RFC3339))
-	if err != nil {
-		return -1, -1, err
-	}
-
 	lastId, err := res.LastInsertId()
 	if err != nil {
 		return -1, -1, err
@@ -247,6 +266,21 @@ func (dal *MySQL) PutFunctionIfNotExisted(userName, funcName, funcContent string
 	}
 
 	return lastId, rowCnt, nil
+
+}
+
+func (dal *MySQL) GetFunction(userName, functionName string) (string, error) {
+	log.Println("Retriving function", functionName, "for user", userName)
+	var content string
+	err := dal.QueryRow(fmt.Sprintf(
+		"SELECT content FROM %s f JOIN %s u WHERE f.name = ? AND u.name = ?",
+		dal.FunctionsTable, dal.UsersTable), functionName, userName).Scan(&content)
+	if err != nil {
+		return "", err
+	}
+
+	return content, nil
+
 }
 
 // Careful with this function, it drops your entire database.

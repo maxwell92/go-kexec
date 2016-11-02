@@ -20,7 +20,6 @@ type Function struct {
 	UserID  int64
 	Name    string
 	Content string
-	Created time.Time
 	Updated time.Time
 }
 

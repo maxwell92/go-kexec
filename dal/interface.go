@@ -11,10 +11,12 @@ type DAL interface {
 	//          (error) if there is one
 	PutUserIfNotExisted(groupName, userName string) (int64, int64, error)
 
-	// Insert function into DB if not existed.
+	// If the function does not exist, insert one,
+	// otherwise, update it.
 	//
 	// Returns: (int64) insert row id,
 	//          (int64) # of rows influenced,
 	//          (error) if there is one
-	PutFunctionIfNotExisted(userName, funcName, funcContent string, userId int64) (int64, int64, error)
+	PutFunction(userName, funcName, funcContent string, userId int64) (int64, int64, error)
+	GetFunction(userName, functionName string) (string, error)
 }

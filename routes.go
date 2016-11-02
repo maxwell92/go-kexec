@@ -69,10 +69,16 @@ var routes = Routes{
 		LogoutHandler,
 	},
 	Route{
-		"Internal",
+		"Dashboard",
 		"GET",
-		"/internal",
-		InternalPageHandler,
+		"/dashboard",
+		DashboardHandler,
+	},
+	Route{
+		"Create",
+		"GET",
+		"/create",
+		CreateFuncPageHandler,
 	},
 	Route{
 		"Create",
@@ -81,9 +87,21 @@ var routes = Routes{
 		CreateFunctionHandler,
 	},
 	Route{
-		"Call",
+		"Edit",
 		"GET",
-		"/call",
+		"/edit/{function}",
+		EditFuncPageHandler,
+	},
+	Route{
+		"Delete",
+		"DELETE",
+		"/function/{function}",
+		DeleteFunctionHandler,
+	},
+	Route{
+		"Call",
+		"POST",
+		"/call/{function}",
 		CallHandler,
 	},
 	Route{
