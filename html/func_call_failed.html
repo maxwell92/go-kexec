@@ -10,8 +10,10 @@
 </head>
 <body>
 <div class="container">
-<h3>Function successfully created!</h3>
-<a type="button" class="btn btn-default" href="/dashboard">Back</a>
+<div class="alert alert-danger">
+  <strong>Error!</strong> {{.Message}}
+</div>
+<button type="button" class="btn btn-default" onclick="history.go(-1);">Back</button>
 </div>
 </body>
 </html>

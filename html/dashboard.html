@@ -50,7 +50,7 @@
         		<button type="button" class="close" data-dismiss="modal">&times;</button>
         		<h4 class="modal-title">Input Parameters</h4>
       		  </div>
-			  <form id="paramForm" action="/call/{{.FuncName}}" method="post">
+			  <form id="paramForm" action="/functions/{{.FuncName}}/call" method="post">
       		  <div class="modal-body">
 				<p>Input your parameters in JSON format</p>
 				<textarea class="form-control" rows="5" id="params" name="params">{
@@ -70,7 +70,7 @@
 		<span class="caret"></span></a>
 		<ul class="dropdown-menu">
 		<li><a href="/{{.FuncName}}">Edit</a></li>
-		<li><a href="#">Delete</a></li>
+		<li><a href="/functions/{{.FuncName}}">Delete</a></li>
 		</ul>
 	  </div>
 			</td>

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -24,7 +25,7 @@ func (ah appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// We can retrieve the status here and write out a specific
 			// HTTP status code.
 			log.Printf("HTTP %d - %s", e.Status(), e)
-			http.Error(w, e.Message(), e.Status())
+			http.Error(w, fmt.Sprintf("%s: %s", e.Message(), e), e.Status())
 		default:
 			// Any error types we don't specifically look out for default
 			// to serving a HTTP 500
@@ -95,19 +96,19 @@ var routes = Routes{
 	Route{
 		"Delete",
 		"DELETE",
-		"/{function}",
+		"/functions/{function}",
 		DeleteFunctionHandler,
 	},
 	Route{
 		"Call",
 		"POST",
-		"/call/{function}",
+		"/functions/{function}/call",
 		CallHandler,
 	},
 	Route{
 		"Call",
 		"POST",
-		"/call/{username}/{function}",
+		"/users/{username}/functions/{function}/call",
 		CallFunctionHandler,
 	},
 }

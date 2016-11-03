@@ -20,10 +20,14 @@ import (
 
 var (
 	MessageCreateFunctionFailed = "Failed to create function"
+	MessageCallFunctionFailed   = "Failed to call function"
+	MessageInternalServerError  = "Server Error"
 
-	MessageCallFunctionFailed = "Failed to call function"
-
-	MessageInternalServerError = "Server Error"
+	LoginTemplate          = template.Must(template.ParseFiles("html/login.html"))
+	DashboardTemplate      = template.Must(template.ParseFiles("html/dashboard.html"))
+	ConfFuncTemplate       = template.Must(template.ParseFiles("html/configure_func.html"))
+	FuncCalledTemplate     = template.Must(template.ParseFiles("html/func_called.html"))
+	FuncCallFailedTemplate = template.Must(template.ParseFiles("html/func_call_failed.html"))
 )
 
 func IndexPageHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
@@ -33,8 +37,7 @@ func IndexPageHandler(a *appContext, response http.ResponseWriter, request *http
 		//TODO: redirect or call the handler directly
 		return DashboardHandler(a, response, request)
 	} else {
-		t := template.Must(template.ParseFiles("html/login.html"))
-		t.Execute(response, nil)
+		LoginTemplate.Execute(response, nil)
 	}
 	return nil
 }
@@ -55,8 +58,7 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 					break
 				}
 			}
-			t := template.Must(template.ParseFiles("html/login.html"))
-			t.Execute(response, &LoginPage{LoginErr: true, ErrMsg: errMsg})
+			LoginTemplate.Execute(response, &LoginPage{LoginErr: true, ErrMsg: errMsg})
 			return nil
 		}
 
@@ -91,17 +93,16 @@ func LogoutHandler(a *appContext, response http.ResponseWriter, request *http.Re
 func DashboardHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	namespace := "default"
 	userName := getUserName(a, request)
-	t := template.Must(template.ParseFiles("html/dashboard.html"))
 	if userName != "" {
 		functions, err := getUserFunctions(a, namespace, userName, -1)
 		// Cannot list the function, return a page with no function name
 		if err != nil {
 			log.Println("Cannot list functions for", userName)
-			t.Execute(response, &DashboardPage{Username: userName})
+			DashboardTemplate.Execute(response, &DashboardPage{Username: userName})
 			return nil
 		}
 
-		t.Execute(response, &DashboardPage{Username: userName, Functions: functions})
+		DashboardTemplate.Execute(response, &DashboardPage{Username: userName, Functions: functions})
 	} else {
 		http.Redirect(response, request, "/", http.StatusFound)
 	}
@@ -113,8 +114,7 @@ func CreateFuncPageHandler(a *appContext, response http.ResponseWriter, request 
 	if userName == "" {
 		http.Redirect(response, request, "/", http.StatusFound)
 	} else {
-		t := template.Must(template.ParseFiles("html/configure_func.html"))
-		t.Execute(response, nil)
+		ConfFuncTemplate.Execute(response, nil)
 	}
 	return nil
 }
@@ -132,8 +132,7 @@ func EditFuncPageHandler(a *appContext, response http.ResponseWriter, request *h
 			log.Println("Cannot get function", functionName)
 			return StatusError{http.StatusInternalServerError, err, MessageInternalServerError}
 		}
-		t := template.Must(template.ParseFiles("html/configure_func.html"))
-		t.Execute(response, &ConfigFuncPage{
+		ConfFuncTemplate.Execute(response, &ConfigFuncPage{
 			EnableFuncName: false,
 			FuncName:       functionName,
 			FuncRuntime:    "python27",
@@ -143,6 +142,17 @@ func EditFuncPageHandler(a *appContext, response http.ResponseWriter, request *h
 }
 
 func DeleteFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
+	userName := getUserName(a, request)
+	if userName == "" {
+		http.Redirect(response, request, "/", http.StatusFound)
+	} else {
+		vars := mux.Vars(request)
+		functionName := vars["function"]
+
+		if err := a.dal.DeleteFunction(userName, functionName); err != nil {
+			return StatusError{http.StatusInternalServerError, err, MessageInternalServerError}
+		}
+	}
 	return nil
 }
 func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
@@ -169,10 +179,10 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 			err := errors.New("Function name is empty.")
 			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		} else if runtime == "" {
-			err := errors.New("Runtime is empty.")
+			err := errors.New("No runtime selected.")
 			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		} else if code == "" {
-			err := errors.New("Code. is empty.")
+			err := errors.New("Function code is empty.")
 			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
@@ -231,8 +241,6 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 
 		// If all the above operation succeeded, the function is created
 		// successfully.
-		t := template.Must(template.ParseFiles("html/func_created.html"))
-		t.Execute(response, nil)
 	}
 	return nil
 }
@@ -262,8 +270,7 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 			return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 		}
 
-		t := template.Must(template.ParseFiles("html/func_called.html"))
-		t.Execute(response, &CallResult{Result: status, Log: funcLog})
+		FuncCalledTemplate.Execute(response, &CallResult{Result: status, Log: funcLog})
 	}
 	return nil
 }
@@ -295,7 +302,7 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	return nil
 }
 
-//return log and error
+//return success/failed, log and error
 func callFunction(a *appContext, userName, functionName, params string) (string, string, error) {
 	// create a uuid for each function call. This uuid can be
 	// seen as the execution id for the function (notice there

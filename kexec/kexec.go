@@ -85,11 +85,20 @@ func (k *Kexec) GetFunctionLog(jobName, namespace string) ([]byte, error) {
 	}
 
 	if len(podlist.Items) < 1 {
-		return nil, fmt.Errorf("No pod found for job %s.", jobName)
+		return nil, errors.New(fmt.Sprintf("No pod found for job %s.", jobName))
 	}
 
-	// Only return the log of the first pod
-	podName := podlist.Items[0].Name
+	var podName string
+	for _, pod := range podlist.Items {
+		if pod.Status.Phase != v1.PodPending &&
+			pod.Status.Phase != v1.PodRunning {
+			podName = pod.Name
+		}
+	}
+	if podName == "" {
+		return nil, errors.New(fmt.Sprintf("No completed pod for job %s.", jobName))
+	}
+
 	opts := &v1.PodLogOptions{
 		Follow:     true,
 		Timestamps: false,

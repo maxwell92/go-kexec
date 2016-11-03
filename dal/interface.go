@@ -18,5 +18,6 @@ type DAL interface {
 	//          (int64) # of rows influenced,
 	//          (error) if there is one
 	PutFunction(userName, funcName, funcContent string, userId int64) (int64, int64, error)
-	GetFunction(userName, functionName string) (string, error)
+	GetFunction(userName, funcName string) (string, error)
+	DeleteFunction(userName, funcName string) error
 }

@@ -269,12 +269,12 @@ func (dal *MySQL) PutFunction(userName, funcName, funcContent string, userId int
 
 }
 
-func (dal *MySQL) GetFunction(userName, functionName string) (string, error) {
-	log.Println("Retriving function", functionName, "for user", userName)
+func (dal *MySQL) GetFunction(userName, funcName string) (string, error) {
+	log.Println("Retriving function", funcName, "for user", userName)
 	var content string
 	err := dal.QueryRow(fmt.Sprintf(
 		"SELECT content FROM %s f JOIN %s u WHERE f.name = ? AND u.name = ?",
-		dal.FunctionsTable, dal.UsersTable), functionName, userName).Scan(&content)
+		dal.FunctionsTable, dal.UsersTable), funcName, userName).Scan(&content)
 	if err != nil {
 		return "", err
 	}
@@ -283,7 +283,25 @@ func (dal *MySQL) GetFunction(userName, functionName string) (string, error) {
 
 }
 
-// Careful with this function, it drops your entire database.
+func (dal *MySQL) DeleteFunction(userName, funcName string) error {
+	log.Println("Deleting function", funcName, "for user", userName)
+	stmt, err := dal.Prepare(fmt.Sprintf(
+		"DELETE FROM %s f JOIN",
+		dal.UsersTable))
+
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(userName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Be careful with this function, it drops your entire database.
 // Only used for test purpose.
 func (dal *MySQL) ClearDatabase() error {
 	if _, err := dal.Exec(fmt.Sprintf("DELETE FROM %s", dal.ExecutionsTable)); err != nil {
