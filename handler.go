@@ -165,8 +165,14 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		// Check if function name is empty;
 		// check if runtime template is chosen;
 		// check if the input code is empty.
-		if functionName == "" || runtime == "" || code == "" {
-			err := errors.New("Something's wrong with FunctionName/Runtime/Code.")
+		if functionName == "" {
+			err := errors.New("Function name is empty.")
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
+		} else if runtime == "" {
+			err := errors.New("Runtime is empty.")
+			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
+		} else if code == "" {
+			err := errors.New("Code. is empty.")
 			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
 		}
 
@@ -244,18 +250,20 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 		if functionName == "" {
 			return StatusError{http.StatusFound, errors.New("Empty function name"), MessageCallFunctionFailed}
 		}
+
 		if params == "" {
 			log.Println("Calling function", functionName)
 		} else {
 			log.Println("Calling function", functionName, "with parameters", params)
 		}
-		funcLog, err := callFunction(a, userName, functionName, params)
+
+		status, funcLog, err := callFunction(a, userName, functionName, params)
 		if err != nil {
 			return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 		}
 
 		t := template.Must(template.ParseFiles("html/func_called.html"))
-		t.Execute(response, &CallResult{Log: funcLog})
+		t.Execute(response, &CallResult{Result: status, Log: funcLog})
 	}
 	return nil
 }
@@ -278,16 +286,17 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	}
 
 	// Call function. This will create a job in OpenShift
-	funcLog, err := callFunction(a, userName, functionName, paramsStr)
+	status, funcLog, err := callFunction(a, userName, functionName, paramsStr)
 	if err != nil {
 		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
 	}
 	// Write to response
-	fmt.Fprintf(response, string(funcLog))
+	fmt.Fprintf(response, "Execution %s.\nResult:\n%s\n", status, string(funcLog))
 	return nil
 }
 
-func callFunction(a *appContext, userName, functionName, params string) (string, error) {
+//return log and error
+func callFunction(a *appContext, userName, functionName, params string) (string, string, error) {
 	// create a uuid for each function call. This uuid can be
 	// seen as the execution id for the function (notice there
 	// are multiple executions for a single function)
@@ -295,7 +304,7 @@ func callFunction(a *appContext, userName, functionName, params string) (string,
 
 	if err != nil {
 		log.Println("Failed to create uuid for function call.")
-		return "", err
+		return "", "", err
 	}
 
 	uuidStr := uuid.String() // uuidStr needed when fetching log
@@ -305,7 +314,7 @@ func callFunction(a *appContext, userName, functionName, params string) (string,
 	nsName := strings.Replace(userName, "_", "-", -1) + "-serverless"
 	if _, err := a.k.CreateUserNamespaceIfNotExist(nsName); err != nil {
 		log.Println("Failed to get/create user namespace", nsName)
-		return "", err
+		return "", "", err
 	}
 	jobName := functionName + "-" + uuidStr
 	image := a.conf.DockerRegistry + "/" + userName + "/" + functionName
@@ -313,19 +322,27 @@ func callFunction(a *appContext, userName, functionName, params string) (string,
 
 	if err := a.k.CreateFunctionJob(jobName, image, params, nsName, labels); err != nil {
 		log.Println("Failed to call function", functionName)
-		return "", err
+		return "", "", err
 	}
-	// Wait for job to complete
-	if err := a.k.WaitForPodComplete(jobName, nsName); err != nil {
-		return "", err
+	// Run the job
+	status, err := a.k.RunJob(jobName, nsName)
+	if err != nil {
+		return "", "", err
 	}
 
+	// Get the log
 	funcLog, err := a.k.GetFunctionLog(jobName, nsName)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	log.Printf("Function Log:\n %s", string(funcLog))
-	return string(funcLog), nil
+
+	// Delete the job
+	if err := a.k.DeleteFunctionJob(jobName, nsName); err != nil {
+		return "", "", err
+	}
+
+	return status, string(funcLog), nil
 }
 
 func setSession(a *appContext, userName string, response http.ResponseWriter) {

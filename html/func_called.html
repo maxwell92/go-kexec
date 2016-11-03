@@ -10,8 +10,10 @@
 </head>
 <body>
 <div class="container">
-<h3>Execution result:</h3>
-<p>{{.Log}}</p>
+<h3>Execution result: {{.Result}}</h3>
+<div class="well">
+  <pre><samp>{{.Log}}<samp></pre>
+</div>
 <button type="button" class="btn btn-default" onclick="history.go(-1);">Back</button>
 </div>
 </body>

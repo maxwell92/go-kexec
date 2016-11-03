@@ -23,7 +23,8 @@ import (
 )
 
 var (
-	JobEnvParams = "SERVERLESS_PARAMS"
+	JobEnvParams                 = "SERVERLESS_PARAMS"
+	MaxPodExecTime time.Duration = 120
 )
 
 type KexecConfig struct {
@@ -59,14 +60,6 @@ func NewKexec(c *KexecConfig) (*Kexec, error) {
 // CallFunction will create a Job template and then create the Job
 // instance against the specified kubernetes/openshift cluster.
 func (k *Kexec) CreateFunctionJob(jobname, image, params, namespace string, labels map[string]string) error {
-	/*
-		uuid, err := uuid.NewTimeBased()
-		if err != nil {
-			return err
-		}
-		jobname := function + "-" + uuid.String()
-		fmt.Println(jobname)
-	*/
 	template := createJobTemplate(image, jobname, params, namespace, labels)
 
 	_, err := k.Clientset.Batch().Jobs(namespace).Create(template)
@@ -110,6 +103,8 @@ func (k *Kexec) GetFunctionLog(jobName, namespace string) ([]byte, error) {
 
 	defer response.Close()
 
+	log.Println("Got log of pod", podName)
+
 	return ioutil.ReadAll(response)
 }
 
@@ -118,7 +113,55 @@ func (k *Kexec) GetFunctionPods(jobName, namespace string) (*v1.PodList, error) 
 	return k.getFunctionPods(jobName, namespace)
 }
 
-func (k *Kexec) WaitForPodComplete(jobName, namespace string) error {
+// Wait for job to complete and delete the job.
+// Note in Kubernetes when a Pod fails, then the Job controller starts a new Pod.
+// The current implementation waits for the first pod completes and exits.
+func (k *Kexec) RunJob(jobName, namespace string) (string, error) {
+	// Wait for first pod completes
+	podPhase, err := k.waitForPodComplete(jobName, namespace)
+	if err != nil {
+		return "", err
+	}
+	res := string(podPhase)
+	log.Println("Job", jobName, "status:", res)
+	return res, nil
+}
+
+// Delete the entire job and its pods
+func (k *Kexec) DeleteFunctionJob(jobName, namespace string) error {
+	log.Println("Deleting job", jobName, "and its pods...")
+	var deleteOrphanDep = true
+	deleteOptions := api.DeleteOptions{
+		OrphanDependents: &deleteOrphanDep,
+	}
+	if err := k.Clientset.Batch().Jobs(namespace).Delete(jobName, &deleteOptions); err != nil {
+		return err
+	}
+	if err := k.DeleteFunctionPods(jobName, namespace); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *Kexec) DeleteFunctionPods(jobName, namespace string) error {
+	var deleteOrphanDep = true
+	deleteOptions := api.DeleteOptions{
+		OrphanDependents: &deleteOrphanDep,
+	}
+	// Create job label selector
+	jobLabelSelector := labels.SelectorFromSet(labels.Set{
+		"job-name": jobName,
+	})
+
+	// List pods according to `jobLabelSelector`
+	listOptions := api.ListOptions{
+		LabelSelector: jobLabelSelector,
+	}
+
+	return k.Clientset.Core().Pods(namespace).DeleteCollection(&deleteOptions, listOptions)
+}
+
+func (k *Kexec) waitForPodComplete(jobName, namespace string) (v1.PodPhase, error) {
 	// Create job label selector
 	jobLabelSelector := labels.SelectorFromSet(labels.Set{
 		"job-name": jobName,
@@ -130,10 +173,10 @@ func (k *Kexec) WaitForPodComplete(jobName, namespace string) error {
 		LabelSelector: jobLabelSelector,
 	}
 
-	var status v1.PodStatus
+	var podPhase v1.PodPhase
 	w, err := k.Clientset.Core().Pods(namespace).Watch(listOptions)
 	if err != nil {
-		return err
+		return podPhase, err
 	}
 	func() {
 		for {
@@ -143,22 +186,22 @@ func (k *Kexec) WaitForPodComplete(jobName, namespace string) error {
 					return
 				}
 				resp := events.Object.(*v1.Pod)
-				log.Println("Pod status:", resp.Status.Phase)
-				status = resp.Status
-				if resp.Status.Phase != v1.PodPending &&
-					resp.Status.Phase != v1.PodRunning {
+				podPhase = resp.Status.Phase
+				log.Println("Pod status:", podPhase)
+				if podPhase != v1.PodPending &&
+					podPhase != v1.PodRunning {
 					w.Stop()
 				}
-				if resp.Status.Phase == v1.PodUnknown {
-					err = errors.New(resp.Status.Reason)
+				if podPhase == v1.PodUnknown {
+					log.Println("Pod status unknown. Reason:", resp.Status.Reason)
 				}
-			case <-time.After(60 * time.Second):
-				err = errors.New("Timeout to wait for job completes")
+			case <-time.After(MaxPodExecTime * time.Second):
+				err = errors.New("Timeout to wait for pod completes")
 				w.Stop()
 			}
 		}
 	}()
-	return err
+	return podPhase, err
 }
 
 // public function to create a namespace if it does not exist

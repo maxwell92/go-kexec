@@ -89,13 +89,13 @@ var routes = Routes{
 	Route{
 		"Edit",
 		"GET",
-		"/edit/{function}",
+		"/{function}",
 		EditFuncPageHandler,
 	},
 	Route{
 		"Delete",
 		"DELETE",
-		"/function/{function}",
+		"/{function}",
 		DeleteFunctionHandler,
 	},
 	Route{
