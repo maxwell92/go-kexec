@@ -25,7 +25,12 @@ func (ah appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// We can retrieve the status here and write out a specific
 			// HTTP status code.
 			log.Printf("HTTP %d - %s", e.Status(), e)
-			http.Error(w, fmt.Sprintf("%s: %s", e.Message(), e), e.Status())
+			errMsg := fmt.Sprintf("%s: %s", e.Message(), e)
+			if e.SendErrorResponse() {
+				http.Error(w, errMsg, e.Status())
+			} else {
+				ErrorTemplate.Execute(w, &ErrorPage{Message: errMsg})
+			}
 		default:
 			// Any error types we don't specifically look out for default
 			// to serving a HTTP 500
@@ -95,7 +100,7 @@ var routes = Routes{
 	},
 	Route{
 		"Delete",
-		"DELETE",
+		"POST",
 		"/functions/{function}",
 		DeleteFunctionHandler,
 	},

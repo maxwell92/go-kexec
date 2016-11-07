@@ -72,14 +72,32 @@
     editor.getSession().setMode("ace/mode/python");
 
 	$('#codeForm').submit(function(e){
+		// Prevent the default form submission
+		e.preventDefault();
+
+		// Validate function name
+		var reg = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+		if(!reg.test($('#functionName').val())){
+			document.getElementById('error').style.display = "block";
+			$('#errMsg').text("Invalid function name. Must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])? (e.g. 'my-name' or '123-abc')]");
+			$('html').scrollTop(0);
+
+			return;
+		}
+
+		// Disable buttons and change text
 		var btn = document.getElementById("savebtn");
 		btn.disabled = true;
 		btn.style.cursor = "default";
 		btn.innerHTML = "Saving...";
 		document.getElementById("cancelbtn").disabled = true;
+
+		// Show text area
 		var textarea = document.getElementById("myTextarea");
     	textarea.value = editor.getSession().getValue();
 		document.getElementById("ta").style.display = "block";
+
+		// Handle callback
 		$.ajax({
 		  url: $('#codeForm').attr('action'),
 		  type: 'POST',
@@ -97,10 +115,8 @@
 			document.getElementById("savebtn").disabled = false;
 			document.getElementById("savebtn").innerHTML = "Save";
 			document.getElementById("cancelbtn").disabled = false;
-			//$("#successDialog").dialog();
 		  }
 		});
-		e.preventDefault();
 	});
 </script>
 </body>

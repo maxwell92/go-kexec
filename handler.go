@@ -23,11 +23,11 @@ var (
 	MessageCallFunctionFailed   = "Failed to call function"
 	MessageInternalServerError  = "Server Error"
 
-	LoginTemplate          = template.Must(template.ParseFiles("html/login.html"))
-	DashboardTemplate      = template.Must(template.ParseFiles("html/dashboard.html"))
-	ConfFuncTemplate       = template.Must(template.ParseFiles("html/configure_func.html"))
-	FuncCalledTemplate     = template.Must(template.ParseFiles("html/func_called.html"))
-	FuncCallFailedTemplate = template.Must(template.ParseFiles("html/func_call_failed.html"))
+	LoginTemplate      = template.Must(template.ParseFiles("html/login.html"))
+	DashboardTemplate  = template.Must(template.ParseFiles("html/dashboard.html"))
+	ConfFuncTemplate   = template.Must(template.ParseFiles("html/configure_func.html"))
+	FuncCalledTemplate = template.Must(template.ParseFiles("html/func_called.html"))
+	ErrorTemplate      = template.Must(template.ParseFiles("html/error.html"))
 )
 
 func IndexPageHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
@@ -67,7 +67,8 @@ func LoginHandler(a *appContext, response http.ResponseWriter, request *http.Req
 
 		// Return internal server error if DB operation failed
 		if err != nil {
-			return StatusError{http.StatusInternalServerError, err, MessageInternalServerError}
+			return StatusError{Code: http.StatusInternalServerError,
+				Err: err, UserMsg: MessageInternalServerError}
 		}
 
 		if rowCnt > 0 {
@@ -130,7 +131,8 @@ func EditFuncPageHandler(a *appContext, response http.ResponseWriter, request *h
 		content, err := a.dal.GetFunction(userName, functionName)
 		if err != nil {
 			log.Println("Cannot get function", functionName)
-			return StatusError{http.StatusInternalServerError, err, MessageInternalServerError}
+			return StatusError{Code: http.StatusInternalServerError,
+				Err: err, UserMsg: MessageInternalServerError}
 		}
 		ConfFuncTemplate.Execute(response, &ConfigFuncPage{
 			EnableFuncName: false,
@@ -150,7 +152,8 @@ func DeleteFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		functionName := vars["function"]
 
 		if err := a.dal.DeleteFunction(userName, functionName); err != nil {
-			return StatusError{http.StatusInternalServerError, err, MessageInternalServerError}
+			return StatusError{Code: http.StatusInternalServerError,
+				Err: err, UserMsg: MessageInternalServerError}
 		}
 	}
 	return nil
@@ -172,76 +175,83 @@ func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request 
 		runtime := request.FormValue("runtime")
 		code := request.FormValue("codeTextarea")
 
-		// Check if function name is empty;
-		// check if runtime template is chosen;
-		// check if the input code is empty.
-		if functionName == "" {
-			err := errors.New("Function name is empty.")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		} else if runtime == "" {
-			err := errors.New("No runtime selected.")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		} else if code == "" {
-			err := errors.New("Function code is empty.")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
+		if err := createFunction(a, userName, functionName, runtime, code); err != nil {
+			return StatusError{Code: http.StatusFound,
+				Err:         err,
+				UserMsg:     MessageCreateFunctionFailed,
+				SendErrResp: true}
 		}
-
-		newCode := formatCode(code, functionName)
-		log.Printf("Code uploaded:\n%s", newCode)
-		log.Printf("Start creating function \"%s\" with runtime \"%s\"", functionName, runtime)
-
-		// Create a time based uuid as part of the context directory name
-		uuid, err := uuid.NewTimeBased()
-
-		if err != nil {
-			log.Println("Failed to create uuid for function call.")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		uuidStr := uuid.String()
-		userCtx := userName + "-" + uuidStr
-
-		// Create the execution file for the function
-		ctxDir := filepath.Join(docker.IBContext, userCtx)
-
-		if err := os.Mkdir(ctxDir, os.ModePerm); err != nil {
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		exeFileName := filepath.Join(ctxDir, docker.ExecutionFile)
-		exeFile, err := os.Create(exeFileName)
-
-		if err != nil {
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-		defer exeFile.Close()
-
-		// Write the function into the execution file
-		if _, err = exeFile.WriteString(newCode); err != nil {
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		// Build funtion
-		if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime, ctxDir); err != nil {
-			log.Println("Build function failed")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		// Register function to configured docker registry
-		if err = docker.RegisterFunction(a.conf.DockerRegistry, userName, functionName); err != nil {
-			log.Println("Register function failed")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		// Put function into db
-		if err = putUserFunction(a, userName, functionName, code, -1); err != nil {
-			log.Println("Failed to put function into DB")
-			return StatusError{http.StatusFound, err, MessageCreateFunctionFailed}
-		}
-
-		// If all the above operation succeeded, the function is created
-		// successfully.
 	}
+	return nil
+}
+
+func createFunction(a *appContext, userName, functionName, runtime, code string) error {
+	// Check if function name is empty;
+	// check if runtime template is chosen;
+	// check if the input code is empty.
+	if functionName == "" {
+		return errors.New("Function name is empty.")
+	} else if runtime == "" {
+		return errors.New("No runtime selected.")
+	} else if code == "" {
+		return errors.New("Function code is empty.")
+	}
+
+	newCode := formatCode(code, functionName)
+	log.Printf("Code uploaded:\n%s", newCode)
+	log.Printf("Start creating function \"%s\" with runtime \"%s\"", functionName, runtime)
+
+	// Create a time based uuid as part of the context directory name
+	uuid, err := uuid.NewTimeBased()
+
+	if err != nil {
+		log.Println("Failed to create uuid for function call.")
+		return err
+	}
+
+	uuidStr := uuid.String()
+	userCtx := userName + "-" + uuidStr
+
+	// Create the execution file for the function
+	ctxDir := filepath.Join(docker.IBContext, userCtx)
+
+	if err := os.Mkdir(ctxDir, os.ModePerm); err != nil {
+		return err
+	}
+
+	exeFileName := filepath.Join(ctxDir, docker.ExecutionFile)
+	exeFile, err := os.Create(exeFileName)
+
+	if err != nil {
+		return err
+	}
+	defer exeFile.Close()
+
+	// Write the function into the execution file
+	if _, err = exeFile.WriteString(newCode); err != nil {
+		return err
+	}
+
+	// Build funtion
+	if err = a.d.BuildFunction(a.conf.DockerRegistry, userName, functionName, runtime, ctxDir); err != nil {
+		log.Println("Build function failed")
+		return err
+	}
+
+	// Register function to configured docker registry
+	if err = docker.RegisterFunction(a.conf.DockerRegistry, userName, functionName); err != nil {
+		log.Println("Register function failed")
+		return err
+	}
+
+	// Put function into db
+	if err = putUserFunction(a, userName, functionName, code, -1); err != nil {
+		log.Println("Failed to put function into DB")
+		return err
+	}
+
+	// If all the above operation succeeded, the function is created
+	// successfully.
 	return nil
 }
 
@@ -256,7 +266,8 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 		http.Redirect(response, request, "/", http.StatusFound)
 	} else {
 		if functionName == "" {
-			return StatusError{http.StatusFound, errors.New("Empty function name"), MessageCallFunctionFailed}
+			return StatusError{Code: http.StatusFound, Err: errors.New("Empty function name"),
+				UserMsg: MessageCallFunctionFailed}
 		}
 
 		if params == "" {
@@ -267,7 +278,7 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 
 		status, funcLog, err := callFunction(a, userName, functionName, params)
 		if err != nil {
-			return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
+			return StatusError{Code: http.StatusFound, Err: err, UserMsg: MessageCallFunctionFailed}
 		}
 
 		FuncCalledTemplate.Execute(response, &CallResult{Result: status, Log: funcLog})
@@ -283,7 +294,7 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	// Get function parameters from request body
 	params, err := ioutil.ReadAll(request.Body)
 	if err != nil {
-		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
+		return StatusError{Code: http.StatusFound, Err: err, UserMsg: MessageCallFunctionFailed}
 	}
 	paramsStr := string(params)
 	if paramsStr == "" {
@@ -295,7 +306,7 @@ func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *h
 	// Call function. This will create a job in OpenShift
 	status, funcLog, err := callFunction(a, userName, functionName, paramsStr)
 	if err != nil {
-		return StatusError{http.StatusFound, err, MessageCallFunctionFailed}
+		return StatusError{Code: http.StatusFound, Err: err, UserMsg: MessageCallFunctionFailed}
 	}
 	// Write to response
 	fmt.Fprintf(response, "Execution %s.\nResult:\n%s\n", status, string(funcLog))

@@ -16,13 +16,15 @@ type Error interface {
 	error
 	Status() int
 	Message() string
+	SendErrorResponse() bool
 }
 
 // StatusError represents an error with an associated HTTP status code.
 type StatusError struct {
-	Code    int
-	Err     error
-	UserMsg string
+	Code        int
+	Err         error
+	UserMsg     string
+	SendErrResp bool
 }
 
 // Allows StatusError to satisfy the error interface.
@@ -37,6 +39,10 @@ func (se StatusError) Status() int {
 
 func (se StatusError) Message() string {
 	return se.UserMsg
+}
+
+func (se StatusError) SendErrorResponse() bool {
+	return se.SendErrResp
 }
 
 type appConfig struct {
@@ -89,4 +95,8 @@ type ConfigFuncPage struct {
 	FuncName       string
 	FuncRuntime    string
 	FuncContent    string
+}
+
+type ErrorPage struct {
+	Message string
 }

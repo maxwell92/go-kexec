@@ -93,6 +93,7 @@ func (k *Kexec) GetFunctionLog(jobName, namespace string) ([]byte, error) {
 		if pod.Status.Phase != v1.PodPending &&
 			pod.Status.Phase != v1.PodRunning {
 			podName = pod.Name
+			break
 		}
 	}
 	if podName == "" {

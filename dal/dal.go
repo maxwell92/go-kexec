@@ -285,7 +285,7 @@ func (dal *MySQL) GetFunction(userName, funcName string) (string, error) {
 
 func (dal *MySQL) DeleteFunction(userName, funcName string) error {
 	log.Println("Deleting function", funcName, "for user", userName)
-	stmt, err := dal.Prepare(fmt.Sprintf(
+	/*stmt, err := dal.Prepare(fmt.Sprintf(
 		"DELETE FROM %s f JOIN",
 		dal.UsersTable))
 
@@ -298,7 +298,8 @@ func (dal *MySQL) DeleteFunction(userName, funcName string) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return nil*/
+	return errors.New("Testing")
 }
 
 // Be careful with this function, it drops your entire database.
