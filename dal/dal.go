@@ -110,7 +110,7 @@ func NewMySQL(config *DalConfig) (*MySQL, error) {
 }
 
 // List all functions created by a user
-func (dal *MySQL) ListFunctionsOfUser(namespace, username string, userId int64) ([]*Function, error) {
+func (dal *MySQL) ListFunctionsOfUser(username string, userId int64) ([]*Function, error) {
 
 	uid := userId
 
@@ -284,22 +284,27 @@ func (dal *MySQL) GetFunction(userName, funcName string) (string, error) {
 }
 
 func (dal *MySQL) DeleteFunction(userName, funcName string) error {
+	var uid int64
+
 	log.Println("Deleting function", funcName, "for user", userName)
-	/*stmt, err := dal.Prepare(fmt.Sprintf(
-		"DELETE FROM %s f JOIN",
-		dal.UsersTable))
+	err := dal.QueryRow(fmt.Sprintf("SELECT u_id FROM %s WHERE name = ?", dal.UsersTable), userName).Scan(&uid)
+	if err != nil {
+		return err
+	}
+	stmt, err := dal.Prepare(fmt.Sprintf(
+		"DELETE FROM %s WHERE name = ? AND u_id = ?",
+		dal.FunctionsTable))
 
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(userName)
+	_, err = stmt.Exec(funcName, uid)
 	if err != nil {
 		return err
 	}
-	return nil*/
-	return errors.New("Testing")
+	return nil
 }
 
 // Be careful with this function, it drops your entire database.

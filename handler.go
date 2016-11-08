@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -28,6 +27,7 @@ var (
 	ConfFuncTemplate   = template.Must(template.ParseFiles("html/configure_func.html"))
 	FuncCalledTemplate = template.Must(template.ParseFiles("html/func_called.html"))
 	ErrorTemplate      = template.Must(template.ParseFiles("html/error.html"))
+	DeleteFuncTemplate = template.Must(template.ParseFiles("html/func_deleted.html"))
 )
 
 func IndexPageHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
@@ -92,10 +92,9 @@ func LogoutHandler(a *appContext, response http.ResponseWriter, request *http.Re
 }
 
 func DashboardHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
-	namespace := "default"
 	userName := getUserName(a, request)
 	if userName != "" {
-		functions, err := getUserFunctions(a, namespace, userName, -1)
+		functions, err := getUserFunctions(a, userName, -1)
 		// Cannot list the function, return a page with no function name
 		if err != nil {
 			log.Println("Cannot list functions for", userName)
@@ -155,9 +154,11 @@ func DeleteFunctionHandler(a *appContext, response http.ResponseWriter, request 
 			return StatusError{Code: http.StatusInternalServerError,
 				Err: err, UserMsg: MessageInternalServerError}
 		}
+		DeleteFuncTemplate.Execute(response, nil)
 	}
 	return nil
 }
+
 func CreateFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	userName := getUserName(a, request)
 	if userName == "" {
@@ -286,33 +287,6 @@ func CallHandler(a *appContext, response http.ResponseWriter, request *http.Requ
 	return nil
 }
 
-func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
-	vars := mux.Vars(request)
-	userName := vars["username"]
-	functionName := vars["function"]
-
-	// Get function parameters from request body
-	params, err := ioutil.ReadAll(request.Body)
-	if err != nil {
-		return StatusError{Code: http.StatusFound, Err: err, UserMsg: MessageCallFunctionFailed}
-	}
-	paramsStr := string(params)
-	if paramsStr == "" {
-		log.Println("Calling function", functionName)
-	} else {
-		log.Println("Calling function", functionName, "with parameters", paramsStr)
-	}
-
-	// Call function. This will create a job in OpenShift
-	status, funcLog, err := callFunction(a, userName, functionName, paramsStr)
-	if err != nil {
-		return StatusError{Code: http.StatusFound, Err: err, UserMsg: MessageCallFunctionFailed}
-	}
-	// Write to response
-	fmt.Fprintf(response, "Execution %s.\nResult:\n%s\n", status, string(funcLog))
-	return nil
-}
-
 //return success/failed, log and error
 func callFunction(a *appContext, userName, functionName, params string) (string, string, error) {
 	// create a uuid for each function call. This uuid can be
@@ -405,8 +379,8 @@ func putUserIfNotExistedInDB(a *appContext, groupName, userName string) (int64, 
 	return a.dal.PutUserIfNotExisted(groupName, userName)
 }
 
-func getUserFunctions(a *appContext, namespace, username string, userId int64) ([]*FunctionRow, error) {
-	functions, err := a.dal.ListFunctionsOfUser(namespace, username, userId)
+func getUserFunctions(a *appContext, username string, userId int64) ([]*FunctionRow, error) {
+	functions, err := a.dal.ListFunctionsOfUser(username, userId)
 	if err != nil {
 		return nil, err
 	}

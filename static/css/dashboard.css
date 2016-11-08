@@ -110,6 +110,19 @@ body {
   height: 400px;
 }
 
+#myTextarea {
+  position: relative;
+  left:15px;
+  width:980px;
+  height:100px;
+  border-style: solid;
+  border-color:#666;
+  padding:10px;
+  border-radius: 8px;
+  font:0.8em Verdana, Arial, sans-serif;
+  color:#666;
+}
+
 .dropdownbtn {
   border: none;
   padding: 3px 20px;
