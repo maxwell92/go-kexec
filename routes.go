@@ -114,6 +114,6 @@ var routes = Routes{
 		"Call",
 		"POST",
 		"/users/{username}/functions/{function}/call",
-		CallFunctionHandler,
+		ApiCallFunctionHandler,
 	},
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func CallFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
+func ApiCallFunctionHandler(a *appContext, response http.ResponseWriter, request *http.Request) error {
 	vars := mux.Vars(request)
 	userName := vars["username"]
 	functionName := vars["function"]

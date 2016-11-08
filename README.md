@@ -11,7 +11,7 @@ Change FileServerDir in gorilla-config.json to your go-kexec/html directory
 
 Then, go to your bin, run
 ```
-./go-kexec -config=<path to gorilla-config.json>
+./go-kexec -config=<path to config.json>
 ```
 
 # Future work
