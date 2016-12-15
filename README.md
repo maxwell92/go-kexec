@@ -2,7 +2,7 @@
 Function-as-a-Service (FaaS) based on Kubernetes Jobs
 
 # How to build and run
-In go-exec directory, run
+In go-kexec directory, run
 ```
 go install
 ```
